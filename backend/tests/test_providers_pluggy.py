@@ -558,6 +558,7 @@ def test_build_holding_data_sets_investment_category():
     assert out.investment_category == "fixed_income"
     # The promoted `investment_category` doesn't duplicate type/subtype out
     # of metadata — those stay available for anyone reading the raw blob.
+    assert out.metadata is not None
     assert out.metadata["type"] == "FIXED_INCOME"
     assert out.metadata["subtype"] == "TREASURY"
 
