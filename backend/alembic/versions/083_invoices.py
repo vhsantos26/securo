@@ -1,7 +1,7 @@
 """the invoicing ledger: invoices, lines, allocations and settings
 
-Revision ID: 078
-Revises: 077
+Revision ID: 083
+Revises: 082
 Create Date: 2026-08-26
 
 Four new tables, no change to any existing one. That is deliberate and
@@ -39,8 +39,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "078"
-down_revision: Union[str, None] = "077"
+revision: str = "083"
+down_revision: Union[str, None] = "082"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

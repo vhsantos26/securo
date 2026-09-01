@@ -1,7 +1,7 @@
 """the invoice document: issuer fiscal identity, payment details, share links
 
-Revision ID: 079
-Revises: 078
+Revision ID: 084
+Revises: 083
 Create Date: 2026-08-26
 
 Three groups of change, all additive.
@@ -39,8 +39,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "079"
-down_revision: Union[str, None] = "078"
+revision: str = "084"
+down_revision: Union[str, None] = "083"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
