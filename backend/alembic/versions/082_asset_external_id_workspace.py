@@ -1,7 +1,7 @@
 """scope asset external IDs to workspaces
 
-Revision ID: 077
-Revises: 076
+Revision ID: 082
+Revises: 081
 Create Date: 2026-08-30
 """
 
@@ -10,8 +10,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "077"
-down_revision: Union[str, None] = "076"
+revision: str = "082"
+down_revision: Union[str, None] = "081"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

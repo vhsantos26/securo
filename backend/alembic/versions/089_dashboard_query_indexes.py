@@ -1,7 +1,7 @@
 """add composite indexes for dashboard transaction scans
 
-Revision ID: 084
-Revises: 083
+Revision ID: 089
+Revises: 088
 Create Date: 2026-08-29
 """
 
@@ -10,8 +10,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "084"
-down_revision: Union[str, None] = "083"
+revision: str = "089"
+down_revision: Union[str, None] = "088"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
