@@ -37,6 +37,7 @@ from app.providers.base import (
 )
 from app.services import oauth_state
 from app.services import admin_service
+from app.services import provider_credential_service
 from app.services import recurring_match_service
 from app.services.account_service import (
     _simplefin_to_internal_balance,
@@ -58,6 +59,36 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 _PROVIDER_SELL_DATE_METADATA_KEY = "_securo_provider_sell_date"
+
+
+async def _resolve_provider_for_workspace(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    provider_name: str,
+    credential_id: uuid.UUID | None = None,
+    prefer_environment_for_legacy: bool = False,
+):
+    """Resolve Pluggy per workspace while keeping other providers unchanged."""
+    if provider_name != "pluggy":
+        return get_provider(provider_name), None
+    try:
+        return await provider_credential_service.resolve_provider(
+            session, workspace_id, provider_name, credential_id, prefer_environment_for_legacy
+        )
+    except provider_credential_service.WorkspaceCredentialUnavailableError:
+        # An explicit/pinned workspace credential has failed validation or can
+        # no longer be decrypted. Falling back to .env here would run the
+        # operation under a different Pluggy project and break credential
+        # isolation between workspaces.
+        raise
+    except ProviderNotConfiguredError as exc:
+        # Keeps the legacy registry seam available to isolated provider tests;
+        # in production it only succeeds when an environment-backed Pluggy
+        # provider is actually registered.
+        try:
+            return get_provider(provider_name), None
+        except ValueError:
+            raise exc
 
 
 def _remember_linked_card(
@@ -275,6 +306,7 @@ async def _sync_holdings(
     user_id: uuid.UUID,
     connection: BankConnection,
     credentials: dict,
+    provider=None,
 ) -> None:
     """Fetch investment holdings from the provider and upsert them as Assets.
 
@@ -296,7 +328,8 @@ async def _sync_holdings(
     # Storage errors below are intentionally not caught — they indicate
     # a schema/invariant bug we want to surface, not a hiccup to swallow.
     try:
-        provider = get_provider(connection.provider)
+        if provider is None:
+            provider = get_provider(connection.provider)
         holdings = await provider.get_holdings(credentials)
     except Exception:  # noqa: BLE001
         logger.exception(
@@ -901,13 +934,20 @@ async def get_oauth_url(
     workspace_id: uuid.UUID,
     flow_params: Optional[dict] = None,
     reconnect_connection_id: Optional[uuid.UUID] = None,
+    session: AsyncSession | None = None,
 ) -> str:
-    provider = get_provider(provider_name)
+    if session is None:
+        provider, credential = get_provider(provider_name), None
+    else:
+        provider, credential = await _resolve_provider_for_workspace(
+            session, workspace_id, provider_name
+        )
     state = await oauth_state.store_state(
         {
             "user_id": str(user_id),
             "workspace_id": str(workspace_id),
             "provider": provider_name,
+            "provider_credential_id": str(credential.id) if credential else None,
             "flow_params": flow_params or {},
             "reconnect_connection_id": (
                 str(reconnect_connection_id) if reconnect_connection_id else None
@@ -926,12 +966,19 @@ async def get_reauth_url(
     connection = await get_connection(session, connection_id, workspace_id)
     if not connection:
         raise ValueError("Connection not found")
-    provider = get_provider(connection.provider)
+    provider, credential = await _resolve_provider_for_workspace(
+        session,
+        workspace_id,
+        connection.provider,
+        connection.provider_credential_id,
+        prefer_environment_for_legacy=connection.provider_credential_id is None,
+    )
     state = await oauth_state.store_state(
         {
             "user_id": str(user_id),
             "workspace_id": str(workspace_id),
             "provider": connection.provider,
+            "provider_credential_id": str(credential.id) if credential else None,
             "flow_params": (connection.settings or {}).get("flow_params") or {},
             "reconnect_connection_id": str(connection.id),
         }
@@ -945,9 +992,19 @@ async def get_reauth_url(
 
 
 async def list_provider_institutions(
-    provider_name: str, country: Optional[str] = None
+    provider_name: str,
+    country: Optional[str] = None,
+    session: AsyncSession | None = None,
+    workspace_id: uuid.UUID | None = None,
 ) -> dict:
-    provider = get_provider(provider_name)
+    if session is None:
+        provider = get_provider(provider_name)
+    else:
+        if workspace_id is None:
+            raise ValueError("workspace_id is required when resolving provider credentials")
+        provider, _credential = await _resolve_provider_for_workspace(
+            session, workspace_id, provider_name
+        )
     data = await provider.list_institutions(country)
     return {
         "countries": data.countries,
@@ -968,11 +1025,32 @@ async def list_provider_institutions(
 
 
 async def create_connect_token(
-    provider_name: str, user_id: uuid.UUID, item_id: str | None = None
+    provider_name: str,
+    user_id: uuid.UUID,
+    item_id: str | None = None,
+    *,
+    session: AsyncSession | None = None,
+    workspace_id: uuid.UUID | None = None,
+    credential_id: uuid.UUID | None = None,
+    prefer_environment_for_legacy: bool = False,
 ) -> dict:
-    provider = get_provider(provider_name)
+    if session is None:
+        provider, credential = get_provider(provider_name), None
+    else:
+        if workspace_id is None:
+            raise ValueError("workspace_id is required when resolving provider credentials")
+        provider, credential = await _resolve_provider_for_workspace(
+            session,
+            workspace_id,
+            provider_name,
+            credential_id,
+            prefer_environment_for_legacy=prefer_environment_for_legacy,
+        )
     token_data = await provider.create_connect_token(str(user_id), item_id=item_id)
-    return {"access_token": token_data.access_token}
+    result = {"access_token": token_data.access_token}
+    if credential:
+        result["provider_credential_id"] = credential.id
+    return result
 
 
 async def update_connection_settings(
@@ -1010,6 +1088,7 @@ async def handle_oauth_callback(
     state: Optional[str] = None,
     sync_assets: Optional[bool] = None,
     reconnect_connection_id: Optional[uuid.UUID] = None,
+    provider_credential_id: Optional[uuid.UUID] = None,
 ) -> BankConnection:
     state_payload: dict = {}
     if state:
@@ -1023,6 +1102,9 @@ async def handle_oauth_callback(
             raise ValueError("OAuth state workspace does not match active workspace")
         state_payload = consumed
         provider_name = consumed.get("provider") or provider_name
+        state_credential = consumed.get("provider_credential_id")
+        if state_credential:
+            provider_credential_id = uuid.UUID(str(state_credential))
     reconnect_id = state_payload.get("reconnect_connection_id") or reconnect_connection_id
     existing_reconnect: BankConnection | None = None
     if reconnect_id:
@@ -1035,11 +1117,20 @@ async def handle_oauth_callback(
         if provider_name and provider_name != existing_reconnect.provider:
             raise ValueError("Reconnect provider does not match target connection")
         provider_name = existing_reconnect.provider
+        provider_credential_id = existing_reconnect.provider_credential_id
 
     if not provider_name:
         raise ValueError("OAuth callback missing provider")
 
-    provider = get_provider(provider_name)
+    provider, credential = await _resolve_provider_for_workspace(
+        session,
+        workspace_id,
+        provider_name,
+        provider_credential_id,
+        prefer_environment_for_legacy=(
+            existing_reconnect is not None and existing_reconnect.provider_credential_id is None
+        ),
+    )
     connection_data = await provider.handle_oauth_callback(code)
 
     if existing_reconnect:
@@ -1074,6 +1165,7 @@ async def handle_oauth_callback(
         credentials=connection_data.credentials,
         settings=initial_settings,
         status="active",
+        provider_credential_id=credential.id if credential else None,
     )
     session.add(connection)
     await session.flush()
@@ -1238,7 +1330,7 @@ async def handle_oauth_callback(
     # /accounts. Pulled after account setup when enabled so holdings are
     # available on the Assets page immediately after the widget closes.
     if _sync_assets_enabled(connection.settings):
-        await _sync_holdings(session, user_id, connection, connection_data.credentials)
+        await _sync_holdings(session, user_id, connection, connection_data.credentials, provider)
 
     connection.last_sync_at = datetime.now(timezone.utc)
     await session.commit()
@@ -1706,7 +1798,15 @@ async def sync_connection(
     # provider is a server misconfiguration, and the catch-all below would
     # wrongly stamp the (healthy) connection with status="error".
     try:
-        provider = get_provider(connection.provider)
+        provider, _credential = await _resolve_provider_for_workspace(
+            session,
+            workspace_id,
+            connection.provider,
+            connection.provider_credential_id,
+            prefer_environment_for_legacy=connection.provider_credential_id is None,
+        )
+    except ProviderNotConfiguredError:
+        raise
     except ValueError as exc:
         raise ProviderNotConfiguredError(
             f"Provider '{connection.provider}' is not configured in this process. "
@@ -2164,7 +2264,7 @@ async def sync_connection(
         # don't fail the sync; a bank connector that doesn't expose
         # /investments shouldn't block the transaction sync that just succeeded.
         if _sync_assets_enabled(conn_settings):
-            await _sync_holdings(session, user_id, connection, credentials)
+            await _sync_holdings(session, user_id, connection, credentials, provider)
 
         # Reap institution rows referenced by nothing. Id-carrying servers
         # never orphan a row (renames update in place), but a name-only

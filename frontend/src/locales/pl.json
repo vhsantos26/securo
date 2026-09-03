@@ -58,7 +58,10 @@
     "archiveHint": "Obszar roboczy zostanie ukryty z listy i przełącznika. Dane zostają zachowane.",
     "archiveSuccess": "Zarchiwizowano obszar roboczy",
     "archiveConfirmTitle": "Zarchiwizować obszar roboczy?",
-    "archiveConfirmDescription": "Obszar roboczy „{{name}}” zostanie usunięty z listy. Dane zostają zachowane, a administrator może go później przywrócić."
+    "archiveConfirmDescription": "Obszar roboczy „{{name}}” zostanie usunięty z listy. Dane zostają zachowane, a administrator może go później przywrócić.",
+    "integrations": {
+      "title": "Integracje bankowe", "description": "Każdy obszar roboczy może używać własnego konta programisty.", "statusWorkspace": "Skonfigurowano w tym obszarze roboczym ({{clientId}})", "statusEnvironment": "Używa starszej konfiguracji środowiska", "statusUnreadable": "Dane uwierzytelniające trzeba skonfigurować ponownie", "statusUnconfigured": "Nieskonfigurowano", "active": "Aktywna", "inactive": "Nieaktywna", "secretHint": "Client Secret jest szyfrowany i nie można go wyświetlić po zapisaniu. Edytorzy mogą łączyć banki przez aktywną integrację.", "clientId": "Client ID", "clientSecret": "Client Secret", "validating": "Sprawdzanie…", "saveAndValidate": "Zapisz i sprawdź", "adoptConfirm": "Skonfigurowana integracja zostanie sprawdzona dla każdego istniejącego połączenia przed migracją. Kontynuować?", "adopting": "Migracja…", "adoptExisting": "Przejmij {{count}} istniejące połączenie(a)", "manageOnly": "Tylko właściciel lub menedżer może skonfigurować integrację.", "saveSuccess": "Pluggy skonfigurowano dla tego obszaru roboczego", "saveError": "Nie udało się sprawdzić danych Pluggy", "adoptSuccess": "Istniejące połączenia Pluggy powiązano z obszarem roboczym", "adoptError": "Nie udało się zmigrować istniejących połączeń"
+    }
   },
   "app": {
     "name": "Securo",

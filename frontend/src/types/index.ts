@@ -78,6 +78,16 @@ export interface WorkspaceMember {
   joined_at: string
 }
 
+export interface WorkspaceIntegration {
+  provider: string
+  configured: boolean
+  source: 'workspace' | 'environment' | 'none' | 'unreadable'
+  client_id_hint: string | null
+  active_credential_id: string | null
+  updated_at: string | null
+  legacy_connection_count: number
+}
+
 export interface UserPreferences {
   language?: string
   date_format?: string

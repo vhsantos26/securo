@@ -20,6 +20,7 @@ from app.models.fx_rate import FxRate
 from app.models.transaction_attachment import TransactionAttachment
 from app.models.payee import Payee, PayeeMapping, PayeeTaxId
 from app.models.app_settings import AppSetting
+from app.models.workspace_provider_credential import WorkspaceProviderCredential
 from app.models.goal import Goal
 from app.models.credit_card_bill import CreditCardBill
 from app.models.group import Group, GroupMember
@@ -61,6 +62,7 @@ __all__ = [
     "PayeeMapping",
     "PayeeTaxId",
     "AppSetting",
+    "WorkspaceProviderCredential",
     "Goal",
     "CreditCardBill",
     "Group",
