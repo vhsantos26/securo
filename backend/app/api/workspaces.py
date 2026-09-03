@@ -16,7 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import current_active_user, get_user_manager, UserManager
 from app.core.auth_policy import local_auth_enabled, require_local_auth_enabled
 from app.core.database import get_async_session
-from app.core.workspace_context import WorkspaceContext, current_workspace
+from app.core.workspace_context import (
+    WorkspaceContext,
+    current_workspace,
+    current_writable_workspace,
+)
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMember
 from app.schemas.workspace import (
@@ -150,14 +154,16 @@ async def save_workspace_pluggy_integration(
     workspace_id: uuid.UUID,
     body: PluggyCredentialWrite,
     session: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    ctx: WorkspaceContext = Depends(current_writable_workspace),
 ):
-    await workspace_service.require_membership(session, workspace_id, user.id, min_role="owner")
+    if ctx.id != workspace_id:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    ctx.require_owner()
     try:
         await provider_credential_service.save_pluggy_credential(
             session,
             workspace_id,
-            user.id,
+            ctx.user_id,
             body.client_id,
             body.client_secret.get_secret_value(),
         )
@@ -176,9 +182,11 @@ async def save_workspace_pluggy_integration(
 async def adopt_workspace_pluggy_connections(
     workspace_id: uuid.UUID,
     session: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    ctx: WorkspaceContext = Depends(current_writable_workspace),
 ):
-    await workspace_service.require_membership(session, workspace_id, user.id, min_role="owner")
+    if ctx.id != workspace_id:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    ctx.require_owner()
     try:
         await provider_credential_service.adopt_legacy_pluggy_connections(session, workspace_id)
         await session.commit()
