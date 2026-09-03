@@ -36,12 +36,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { AlertTriangle, Archive, Plus, Save, Trash2, Users } from 'lucide-react'
+import { AlertTriangle, Archive, KeyRound, Plus, Save, Trash2, Users } from 'lucide-react'
 import { WORKSPACE_KIND_LABEL_KEY } from '@/lib/workspace-kinds'
 import { SUPPORTED_LANGS } from '@/lib/i18n'
 import { countryFlag } from '@/lib/country-flag'
 import { countryName } from '@/lib/country-name'
-import type { WorkspaceKind, WorkspaceMember, WorkspaceRole } from '@/types'
+import type { WorkspaceIntegration, WorkspaceKind, WorkspaceMember, WorkspaceRole } from '@/types'
 
 function labelForRole(role: WorkspaceRole, t: (key: string) => string): string {
   return {
@@ -96,6 +96,8 @@ export default function WorkspaceSettingsPage() {
   const [inviteRole, setInviteRole] = useState<WorkspaceRole>('editor')
   const [removeTarget, setRemoveTarget] = useState<WorkspaceMember | null>(null)
   const [archiveOpen, setArchiveOpen] = useState(false)
+  const [pluggyClientId, setPluggyClientId] = useState('')
+  const [pluggyClientSecret, setPluggyClientSecret] = useState('')
 
   useEffect(() => {
     if (!current) return
@@ -125,6 +127,47 @@ export default function WorkspaceSettingsPage() {
     queryKey: ['currencies'],
     queryFn: currenciesApi.list,
     staleTime: Infinity,
+  })
+
+  const integrationsQuery = useQuery({
+    queryKey: ['workspace-integrations', current?.id],
+    queryFn: () => (current ? workspacesApi.integrations(current.id) : Promise.resolve([] as WorkspaceIntegration[])),
+    enabled: !!current,
+  })
+
+  const savePluggyMutation = useMutation({
+    mutationFn: () => {
+      if (!current) throw new Error('No workspace')
+      return workspacesApi.savePluggyIntegration(current.id, {
+        client_id: pluggyClientId.trim(),
+        client_secret: pluggyClientSecret,
+      })
+    },
+    onSuccess: () => {
+      setPluggyClientSecret('')
+      queryClient.invalidateQueries({ queryKey: ['workspace-integrations', current?.id] })
+      queryClient.invalidateQueries({ queryKey: ['connections', 'providers'] })
+      toast.success(t('workspace.integrations.saveSuccess'))
+    },
+    onError: (e: unknown) => {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toast.error(detail || t('workspace.integrations.saveError'))
+    },
+  })
+
+  const adoptPluggyMutation = useMutation({
+    mutationFn: () => {
+      if (!current) throw new Error('No workspace')
+      return workspacesApi.adoptEnvironmentPluggy(current.id)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workspace-integrations', current?.id] })
+      toast.success(t('workspace.integrations.adoptSuccess'))
+    },
+    onError: (e: unknown) => {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toast.error(detail || t('workspace.integrations.adoptError'))
+    },
   })
 
   const localAuthEnabled = useLocalAuthEnabled()
@@ -473,6 +516,84 @@ export default function WorkspaceSettingsPage() {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Bank integrations are workspace-scoped: credentials never leave the server. */}
+      <section className="space-y-4 rounded-xl border bg-card p-6">
+        <div className="flex items-center gap-2">
+          <KeyRound className="h-4 w-4 text-muted-foreground" />
+          <div>
+            <h2 className="text-base font-semibold">{t('workspace.integrations.title')}</h2>
+            <p className="text-sm text-muted-foreground">{t('workspace.integrations.description')}</p>
+          </div>
+        </div>
+        {integrationsQuery.isLoading ? (
+          <Skeleton className="h-28 w-full" />
+        ) : (() => {
+          const pluggy = integrationsQuery.data?.find((item) => item.provider === 'pluggy')
+          const status = pluggy?.source === 'workspace'
+            ? t('workspace.integrations.statusWorkspace', { clientId: pluggy.client_id_hint })
+            : pluggy?.source === 'environment'
+              ? t('workspace.integrations.statusEnvironment')
+              : pluggy?.source === 'unreadable'
+                ? t('workspace.integrations.statusUnreadable')
+                : t('workspace.integrations.statusUnconfigured')
+          return (
+            <div className="rounded-lg border p-4 space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="font-medium">Pluggy</h3>
+                  <p className="text-sm text-muted-foreground">{status}</p>
+                </div>
+                <Badge variant={pluggy?.configured ? 'secondary' : 'outline'}>
+                  {pluggy?.configured ? t('workspace.integrations.active') : t('workspace.integrations.inactive')}
+                </Badge>
+              </div>
+              {canManage ? (
+                <>
+                  <p className="text-xs text-muted-foreground">{t('workspace.integrations.secretHint')}</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="pluggy-client-id">{t('workspace.integrations.clientId')}</Label>
+                      <Input id="pluggy-client-id" value={pluggyClientId} onChange={(e) => setPluggyClientId(e.target.value)} placeholder={pluggy?.client_id_hint || t('workspace.integrations.clientId')} autoComplete="off" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="pluggy-client-secret">{t('workspace.integrations.clientSecret')}</Label>
+                      <Input id="pluggy-client-secret" type="password" value={pluggyClientSecret} onChange={(e) => setPluggyClientSecret(e.target.value)} placeholder={t('workspace.integrations.clientSecret')} autoComplete="new-password" />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => savePluggyMutation.mutate()}
+                      disabled={!pluggyClientId.trim() || !pluggyClientSecret || savePluggyMutation.isPending}
+                    >
+                      {savePluggyMutation.isPending ? t('workspace.integrations.validating') : t('workspace.integrations.saveAndValidate')}
+                    </Button>
+                    {pluggy?.source === 'workspace' && (pluggy.legacy_connection_count ?? 0) > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (window.confirm(t('workspace.integrations.adoptConfirm'))) {
+                            adoptPluggyMutation.mutate()
+                          }
+                        }}
+                        disabled={adoptPluggyMutation.isPending}
+                      >
+                        {adoptPluggyMutation.isPending
+                          ? t('workspace.integrations.adopting')
+                          : t('workspace.integrations.adoptExisting', { count: pluggy.legacy_connection_count })}
+                      </Button>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">{t('workspace.integrations.manageOnly')}</p>
+              )}
+            </div>
+          )
+        })()}
       </section>
 
       {/* Members card */}

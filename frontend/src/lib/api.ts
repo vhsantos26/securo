@@ -49,6 +49,7 @@ import type {
   WorkspaceKind,
   WorkspaceMember,
   WorkspaceRole,
+  WorkspaceIntegration,
   Asset,
   AssetGroup,
   AssetImportPreview,
@@ -167,6 +168,21 @@ export const workspaces = {
   },
   archive: async (id: string): Promise<Workspace> => {
     const { data } = await api.post(`/workspaces/${id}/archive`)
+    return data
+  },
+  integrations: async (id: string): Promise<WorkspaceIntegration[]> => {
+    const { data } = await api.get(`/workspaces/${id}/integrations`)
+    return data
+  },
+  savePluggyIntegration: async (
+    id: string,
+    payload: { client_id: string; client_secret: string },
+  ): Promise<WorkspaceIntegration> => {
+    const { data } = await api.put(`/workspaces/${id}/integrations/pluggy`, payload)
+    return data
+  },
+  adoptEnvironmentPluggy: async (id: string): Promise<WorkspaceIntegration> => {
+    const { data } = await api.post(`/workspaces/${id}/integrations/pluggy/adopt-environment`)
     return data
   },
 }
@@ -352,9 +368,9 @@ export const connections = {
     const { data } = await api.get('/connections/providers')
     return data.providers
   },
-  getConnectToken: async (provider = 'pluggy'): Promise<string> => {
+  getConnectToken: async (provider = 'pluggy'): Promise<{ access_token: string; provider_credential_id?: string | null }> => {
     const { data } = await api.post('/connections/connect-token', { provider })
-    return data.access_token
+    return data
   },
   getOAuthUrl: async (provider: string, flow_params?: Record<string, unknown>): Promise<string> => {
     const { data } = await api.post('/connections/oauth/url', { provider, flow_params })
@@ -387,12 +403,14 @@ export const connections = {
     state?: string,
     settings?: Pick<ConnectionSettings, 'sync_assets'>,
     reconnectConnectionId?: string,
+    providerCredentialId?: string | null,
   ): Promise<BankConnection> => {
     const { data } = await api.post('/connections/oauth/callback', {
       code,
       provider,
       state,
       reconnect_connection_id: reconnectConnectionId,
+      provider_credential_id: providerCredentialId,
       ...settings,
     })
     return data
@@ -405,9 +423,9 @@ export const connections = {
     const { data } = await api.post(`/connections/${id}/sync`)
     return data
   },
-  getReconnectToken: async (connectionId: string): Promise<string> => {
+  getReconnectToken: async (connectionId: string): Promise<{ access_token: string; provider_credential_id?: string | null }> => {
     const { data } = await api.post(`/connections/${connectionId}/reconnect-token`)
-    return data.access_token
+    return data
   },
   updateSettings: async (
     id: string,

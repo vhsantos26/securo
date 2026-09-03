@@ -5,6 +5,7 @@ creates the additional ones and is the only place `kind` is ever set;
 `PATCH` edits the rest of the workspace and deliberately cannot touch
 it.
 """
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -15,7 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import current_active_user, get_user_manager, UserManager
 from app.core.auth_policy import local_auth_enabled, require_local_auth_enabled
 from app.core.database import get_async_session
-from app.core.workspace_context import WorkspaceContext, current_workspace
+from app.core.workspace_context import (
+    WorkspaceContext,
+    current_workspace,
+    current_writable_workspace,
+)
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMember
 from app.schemas.workspace import (
@@ -23,12 +28,16 @@ from app.schemas.workspace import (
     MemberRead,
     MemberRoleUpdate,
     WorkspaceCreate,
+    WorkspaceIntegrationRead,
     WorkspaceRead,
     WorkspaceUpdate,
+    PluggyCredentialWrite,
 )
 from app.services import module_service, workspace_service
+from app.services import provider_credential_service
 
 router = APIRouter(prefix="/api/workspaces", tags=["workspaces"])
+logger = logging.getLogger(__name__)
 
 
 def _user_display_name(user: User) -> str | None:
@@ -128,6 +137,63 @@ async def create_workspace_endpoint(
 async def get_current_workspace(ctx: WorkspaceContext = Depends(current_workspace)):
     """Return the workspace resolved from X-Workspace-Id (or the default)."""
     return _workspace_read(ctx.workspace, ctx.role)
+
+
+@router.get("/{workspace_id}/integrations", response_model=list[WorkspaceIntegrationRead])
+async def list_workspace_integrations(
+    workspace_id: uuid.UUID,
+    session: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    await workspace_service.require_membership(session, workspace_id, user.id)
+    return [await provider_credential_service.integration_status(session, workspace_id)]
+
+
+@router.put("/{workspace_id}/integrations/pluggy", response_model=WorkspaceIntegrationRead)
+async def save_workspace_pluggy_integration(
+    workspace_id: uuid.UUID,
+    body: PluggyCredentialWrite,
+    session: AsyncSession = Depends(get_async_session),
+    ctx: WorkspaceContext = Depends(current_writable_workspace),
+):
+    if ctx.id != workspace_id:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    ctx.require_owner()
+    try:
+        await provider_credential_service.save_pluggy_credential(
+            session,
+            workspace_id,
+            ctx.user_id,
+            body.client_id,
+            body.client_secret.get_secret_value(),
+        )
+        await session.commit()
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception:
+        await session.rollback()
+        logger.warning("Pluggy credential validation failed for workspace %s", workspace_id, exc_info=True)
+        raise HTTPException(status_code=502, detail="Pluggy rejected the credentials or is unavailable")
+    return await provider_credential_service.integration_status(session, workspace_id)
+
+
+@router.post("/{workspace_id}/integrations/pluggy/adopt-environment", response_model=WorkspaceIntegrationRead)
+async def adopt_workspace_pluggy_connections(
+    workspace_id: uuid.UUID,
+    session: AsyncSession = Depends(get_async_session),
+    ctx: WorkspaceContext = Depends(current_writable_workspace),
+):
+    if ctx.id != workspace_id:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    ctx.require_owner()
+    try:
+        await provider_credential_service.adopt_legacy_pluggy_connections(session, workspace_id)
+        await session.commit()
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc))
+    return await provider_credential_service.integration_status(session, workspace_id)
 
 
 @router.patch("/{workspace_id}", response_model=WorkspaceRead)

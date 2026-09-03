@@ -58,7 +58,30 @@
     "archiveHint": "O workspace fica oculto da lista e do switcher. Os dados continuam preservados.",
     "archiveSuccess": "Workspace arquivado",
     "archiveConfirmTitle": "Arquivar workspace?",
-    "archiveConfirmDescription": "O workspace \"{{name}}\" será removido da sua lista. Os dados ficam preservados e um admin pode restaurar mais tarde."
+    "archiveConfirmDescription": "O workspace \"{{name}}\" será removido da sua lista. Os dados ficam preservados e um admin pode restaurar mais tarde.",
+    "integrations": {
+      "title": "Integrações bancárias",
+      "description": "Cada workspace pode usar sua própria conta de desenvolvedor.",
+      "statusWorkspace": "Configurada neste workspace ({{clientId}})",
+      "statusEnvironment": "Usando a configuração legada do ambiente",
+      "statusUnreadable": "A credencial precisa ser informada novamente",
+      "statusUnconfigured": "Não configurada",
+      "active": "Ativa",
+      "inactive": "Inativa",
+      "secretHint": "O Client Secret é criptografado e não pode ser visualizado depois de salvo. Editores podem conectar bancos usando a integração ativa.",
+      "clientId": "Client ID",
+      "clientSecret": "Client Secret",
+      "validating": "Validando…",
+      "saveAndValidate": "Salvar e validar",
+      "adoptConfirm": "A integração configurada será validada contra cada conexão existente antes da migração. Continuar?",
+      "adopting": "Migrando…",
+      "adoptExisting": "Adotar {{count}} conexão(ões) existente(s)",
+      "manageOnly": "Somente o owner ou manager deste workspace pode configurar a integração.",
+      "saveSuccess": "Pluggy configurado para este workspace",
+      "saveError": "Não foi possível validar as credenciais Pluggy",
+      "adoptSuccess": "Conexões Pluggy existentes foram vinculadas ao workspace",
+      "adoptError": "Não foi possível migrar as conexões existentes"
+    }
   },
   "app": {
     "name": "Securo",
