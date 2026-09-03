@@ -58,7 +58,10 @@
     "archiveHint": "Der Workspace wird aus der Liste entfernt und ist nicht mehr in der Workspace-Auswahl sichtbar. Die Daten bleiben erhalten.",
     "archiveSuccess": "Workspace archiviert",
     "archiveConfirmTitle": "Workspace archivieren?",
-    "archiveConfirmDescription": "Der Workspace \"{{name}}\" wird aus deiner Liste entfernt. Die Daten bleiben erhalten und ein Administrator kann ihn später wiederherstellen."
+    "archiveConfirmDescription": "Der Workspace \"{{name}}\" wird aus deiner Liste entfernt. Die Daten bleiben erhalten und ein Administrator kann ihn später wiederherstellen.",
+    "integrations": {
+      "title": "Bankintegrationen", "description": "Jeder Workspace kann ein eigenes Entwicklerkonto verwenden.", "statusWorkspace": "In diesem Workspace konfiguriert ({{clientId}})", "statusEnvironment": "Verwendet die ältere Umgebungskonfiguration", "statusUnreadable": "Die Zugangsdaten müssen erneut konfiguriert werden", "statusUnconfigured": "Nicht konfiguriert", "active": "Aktiv", "inactive": "Inaktiv", "secretHint": "Das Client Secret wird verschlüsselt und kann nach dem Speichern nicht angezeigt werden. Bearbeiter können Banken über die aktive Integration verbinden.", "clientId": "Client ID", "clientSecret": "Client Secret", "validating": "Wird validiert…", "saveAndValidate": "Speichern und validieren", "adoptConfirm": "Die konfigurierte Integration wird vor der Migration für jede bestehende Verbindung validiert. Fortfahren?", "adopting": "Wird migriert…", "adoptExisting": "{{count}} bestehende Verbindung(en) übernehmen", "manageOnly": "Nur der Eigentümer oder Manager dieses Workspace kann die Integration konfigurieren.", "saveSuccess": "Pluggy für diesen Workspace konfiguriert", "saveError": "Pluggy-Zugangsdaten konnten nicht validiert werden", "adoptSuccess": "Bestehende Pluggy-Verbindungen wurden dem Workspace zugeordnet", "adoptError": "Bestehende Verbindungen konnten nicht migriert werden"
+    }
   },
   "app": {
     "name": "Securo",

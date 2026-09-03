@@ -58,7 +58,10 @@
     "archiveHint": "L'area di lavoro viene nascosta dall'elenco e dal selettore. I dati vengono conservati.",
     "archiveSuccess": "Area di lavoro archiviata",
     "archiveConfirmTitle": "Archiviare l'area di lavoro?",
-    "archiveConfirmDescription": "L'area di lavoro \"{{name}}\" sarà rimossa dal tuo elenco. I dati vengono conservati e un amministratore potrà ripristinarla in seguito."
+    "archiveConfirmDescription": "L'area di lavoro \"{{name}}\" sarà rimossa dal tuo elenco. I dati vengono conservati e un amministratore potrà ripristinarla in seguito.",
+    "integrations": {
+      "title": "Integrazioni bancarie", "description": "Ogni area di lavoro può usare il proprio account sviluppatore.", "statusWorkspace": "Configurata in questa area di lavoro ({{clientId}})", "statusEnvironment": "Usa la configurazione legacy dell’ambiente", "statusUnreadable": "Le credenziali devono essere configurate di nuovo", "statusUnconfigured": "Non configurata", "active": "Attiva", "inactive": "Inattiva", "secretHint": "Il Client Secret è crittografato e non può essere visualizzato dopo il salvataggio. Gli editor possono collegare banche con l’integrazione attiva.", "clientId": "Client ID", "clientSecret": "Client Secret", "validating": "Convalida…", "saveAndValidate": "Salva e convalida", "adoptConfirm": "L’integrazione configurata verrà convalidata per ogni connessione esistente prima della migrazione. Continuare?", "adopting": "Migrazione…", "adoptExisting": "Adotta {{count}} connessione/i esistente/i", "manageOnly": "Solo il proprietario o il responsabile può configurare l’integrazione.", "saveSuccess": "Pluggy configurato per questa area di lavoro", "saveError": "Impossibile convalidare le credenziali Pluggy", "adoptSuccess": "Le connessioni Pluggy esistenti sono state collegate all’area di lavoro", "adoptError": "Impossibile migrare le connessioni esistenti"
+    }
   },
   "app": {
     "name": "Securo",

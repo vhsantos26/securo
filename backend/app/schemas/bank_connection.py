@@ -53,6 +53,7 @@ class OAuthCallbackRequest(BaseModel):
     provider: Optional[str] = None
     sync_assets: Optional[bool] = None
     reconnect_connection_id: Optional[uuid.UUID] = None
+    provider_credential_id: Optional[uuid.UUID] = None
 
 
 class ReauthUrlResponse(BaseModel):
@@ -81,10 +82,12 @@ class ConnectTokenRequest(BaseModel):
 
 class ConnectTokenResponse(BaseModel):
     access_token: str
+    provider_credential_id: Optional[uuid.UUID] = None
 
 
 class ReconnectTokenResponse(BaseModel):
     access_token: str
+    provider_credential_id: Optional[uuid.UUID] = None
 
 
 class ConnectionSettingsUpdate(BaseModel):

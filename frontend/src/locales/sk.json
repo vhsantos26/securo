@@ -58,7 +58,10 @@
     "archiveHint": "Pracovný priestor sa skryje zo zoznamu aj z prepínača. Údaje zostanú zachované.",
     "archiveSuccess": "Pracovný priestor archivovaný",
     "archiveConfirmTitle": "Archivovať pracovný priestor?",
-    "archiveConfirmDescription": "Pracovný priestor „{{name}}“ sa odstráni z tvojho zoznamu. Údaje zostanú zachované a správca ho môže neskôr obnoviť."
+    "archiveConfirmDescription": "Pracovný priestor „{{name}}“ sa odstráni z tvojho zoznamu. Údaje zostanú zachované a správca ho môže neskôr obnoviť.",
+    "integrations": {
+      "title": "Bankové integrácie", "description": "Každý pracovný priestor môže používať vlastný účet vývojára.", "statusWorkspace": "Nakonfigurované v tomto pracovnom priestore ({{clientId}})", "statusEnvironment": "Používa staršiu konfiguráciu prostredia", "statusUnreadable": "Prihlasovacie údaje treba znova nakonfigurovať", "statusUnconfigured": "Nenakonfigurované", "active": "Aktívne", "inactive": "Neaktívne", "secretHint": "Client Secret je šifrovaný a po uložení sa nedá zobraziť. Editori môžu pripájať banky pomocou aktívnej integrácie.", "clientId": "Client ID", "clientSecret": "Client Secret", "validating": "Overovanie…", "saveAndValidate": "Uložiť a overiť", "adoptConfirm": "Nakonfigurovaná integrácia bude pred migráciou overená pre každé existujúce pripojenie. Pokračovať?", "adopting": "Migrácia…", "adoptExisting": "Prevziať {{count}} existujúce pripojenie(a)", "manageOnly": "Integráciu môže konfigurovať iba vlastník alebo správca pracovného priestoru.", "saveSuccess": "Pluggy je nakonfigurovaný pre tento pracovný priestor", "saveError": "Nepodarilo sa overiť prihlasovacie údaje Pluggy", "adoptSuccess": "Existujúce pripojenia Pluggy boli priradené k pracovnému priestoru", "adoptError": "Nepodarilo sa migrovať existujúce pripojenia"
+    }
   },
   "app": {
     "name": "Securo",

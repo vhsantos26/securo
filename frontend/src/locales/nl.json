@@ -58,7 +58,10 @@
     "archiveSuccess": "Workspace gearchiveerd",
     "archiveConfirmTitle": "Workspace archiveren?",
     "archiveConfirmDescription": "De workspace \"{{name}}\" wordt uit uw lijst verwijderd. Gegevens blijven behouden en een beheerder kan deze later herstellen.",
-    "addMemberDescriptionExistingOnly": "Nodig een bestaande gebruiker uit via e-mail."
+    "addMemberDescriptionExistingOnly": "Nodig een bestaande gebruiker uit via e-mail.",
+    "integrations": {
+      "title": "Bankintegraties", "description": "Elke workspace kan een eigen ontwikkelaarsaccount gebruiken.", "statusWorkspace": "Geconfigureerd in deze workspace ({{clientId}})", "statusEnvironment": "Gebruikt verouderde omgevingsconfiguratie", "statusUnreadable": "De gegevens moeten opnieuw worden geconfigureerd", "statusUnconfigured": "Niet geconfigureerd", "active": "Actief", "inactive": "Inactief", "secretHint": "Het Client Secret is versleuteld en kan na het opslaan niet worden bekeken. Editors kunnen banken koppelen met de actieve integratie.", "clientId": "Client ID", "clientSecret": "Client Secret", "validating": "Valideren…", "saveAndValidate": "Opslaan en valideren", "adoptConfirm": "De geconfigureerde integratie wordt vóór de migratie voor elke bestaande verbinding gevalideerd. Doorgaan?", "adopting": "Migreren…", "adoptExisting": "{{count}} bestaande verbinding(en) overnemen", "manageOnly": "Alleen de eigenaar of manager kan de integratie configureren.", "saveSuccess": "Pluggy geconfigureerd voor deze workspace", "saveError": "Pluggy-gegevens konden niet worden gevalideerd", "adoptSuccess": "Bestaande Pluggy-verbindingen zijn aan de workspace gekoppeld", "adoptError": "Bestaande verbindingen konden niet worden gemigreerd"
+    }
   },
   "app": {
     "name": "Securo",

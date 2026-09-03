@@ -58,7 +58,30 @@
     "archiveHint": "The workspace is hidden from the list and switcher. Data is preserved.",
     "archiveSuccess": "Workspace archived",
     "archiveConfirmTitle": "Archive workspace?",
-    "archiveConfirmDescription": "The workspace \"{{name}}\" will be removed from your list. Data is preserved and an admin can restore it later."
+    "archiveConfirmDescription": "The workspace \"{{name}}\" will be removed from your list. Data is preserved and an admin can restore it later.",
+    "integrations": {
+      "title": "Bank integrations",
+      "description": "Each workspace can use its own developer account.",
+      "statusWorkspace": "Configured in this workspace ({{clientId}})",
+      "statusEnvironment": "Using legacy environment configuration",
+      "statusUnreadable": "Credentials need to be configured again",
+      "statusUnconfigured": "Not configured",
+      "active": "Active",
+      "inactive": "Inactive",
+      "secretHint": "The Client Secret is encrypted and cannot be viewed after it is saved. Editors can connect banks using the active integration.",
+      "clientId": "Client ID",
+      "clientSecret": "Client Secret",
+      "validating": "Validating…",
+      "saveAndValidate": "Save and validate",
+      "adoptConfirm": "The configured integration will be validated against every existing connection before migration. Continue?",
+      "adopting": "Migrating…",
+      "adoptExisting": "Adopt {{count}} existing connection(s)",
+      "manageOnly": "Only the workspace owner or manager can configure the integration.",
+      "saveSuccess": "Pluggy configured for this workspace",
+      "saveError": "Could not validate Pluggy credentials",
+      "adoptSuccess": "Existing Pluggy connections were linked to the workspace",
+      "adoptError": "Could not migrate existing connections"
+    }
   },
   "app": {
     "name": "Securo",

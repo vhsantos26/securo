@@ -58,7 +58,10 @@
     "archiveHint": "El espacio de trabajo se oculta de la lista y del selector. Los datos se conservan.",
     "archiveSuccess": "Espacio de trabajo archivado",
     "archiveConfirmTitle": "¿Archivar espacio de trabajo?",
-    "archiveConfirmDescription": "El espacio de trabajo \"{{name}}\" se eliminará de tu lista. Los datos se conservan y un administrador puede restaurarlo más tarde."
+    "archiveConfirmDescription": "El espacio de trabajo \"{{name}}\" se eliminará de tu lista. Los datos se conservan y un administrador puede restaurarlo más tarde.",
+    "integrations": {
+      "title": "Integraciones bancarias", "description": "Cada espacio de trabajo puede usar su propia cuenta de desarrollador.", "statusWorkspace": "Configurada en este espacio de trabajo ({{clientId}})", "statusEnvironment": "Usando la configuración heredada del entorno", "statusUnreadable": "Las credenciales deben configurarse de nuevo", "statusUnconfigured": "Sin configurar", "active": "Activa", "inactive": "Inactiva", "secretHint": "El Client Secret está cifrado y no se puede ver después de guardarlo. Los editores pueden conectar bancos mediante la integración activa.", "clientId": "Client ID", "clientSecret": "Client Secret", "validating": "Validando…", "saveAndValidate": "Guardar y validar", "adoptConfirm": "La integración configurada se validará con cada conexión existente antes de la migración. ¿Continuar?", "adopting": "Migrando…", "adoptExisting": "Adoptar {{count}} conexión(es) existente(s)", "manageOnly": "Solo el propietario o administrador puede configurar la integración.", "saveSuccess": "Pluggy configurado para este espacio de trabajo", "saveError": "No se han podido validar las credenciales de Pluggy", "adoptSuccess": "Las conexiones Pluggy existentes se vincularon al espacio de trabajo", "adoptError": "No se han podido migrar las conexiones existentes"
+    }
   },
   "app": {
     "name": "Securo",

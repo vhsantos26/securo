@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, SecretStr
 
 from app.models.workspace import WorkspaceKind
 
@@ -91,3 +91,18 @@ class MemberInvite(BaseModel):
 
 class MemberRoleUpdate(BaseModel):
     role: str
+
+
+class WorkspaceIntegrationRead(BaseModel):
+    provider: str
+    configured: bool
+    source: str  # workspace | environment | none | unreadable
+    client_id_hint: Optional[str] = None
+    active_credential_id: Optional[uuid.UUID] = None
+    updated_at: Optional[datetime] = None
+    legacy_connection_count: int = 0
+
+
+class PluggyCredentialWrite(BaseModel):
+    client_id: str = Field(min_length=1, max_length=255)
+    client_secret: SecretStr = Field(min_length=1, max_length=2000)
