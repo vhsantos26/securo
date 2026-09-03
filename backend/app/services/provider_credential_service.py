@@ -11,9 +11,10 @@ import functools
 import hashlib
 import uuid
 from datetime import datetime, timezone
+from typing import cast
 
 from cryptography.fernet import Fernet, InvalidToken
-from sqlalchemy import func, select, update
+from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -273,4 +274,4 @@ async def adopt_legacy_pluggy_connections(
         )
         .values(provider_credential_id=active.id)
     )
-    return result.rowcount or 0
+    return cast(CursorResult, result).rowcount or 0
