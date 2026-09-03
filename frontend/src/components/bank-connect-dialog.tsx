@@ -35,6 +35,7 @@ export function BankConnectDialog({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [connectToken, setConnectToken] = useState<string | null>(null)
+  const [providerCredentialId, setProviderCredentialId] = useState<string | null>(null)
   const [syncAssets, setSyncAssets] = useState(true)
   const [optionsConfirmed, setOptionsConfirmed] = useState(false)
   // Only prompt for asset-sync when the provider actually imports holdings.
@@ -43,6 +44,7 @@ export function BankConnectDialog({
   useEffect(() => {
     if (!open) {
       setConnectToken(null)
+      setProviderCredentialId(null)
       setSyncAssets(true)
       setOptionsConfirmed(false)
       return
@@ -56,7 +58,10 @@ export function BankConnectDialog({
         const token = reconnectConnectionId
           ? await connections.getReconnectToken(reconnectConnectionId)
           : await connections.getConnectToken(provider)
-        if (!cancelled) setConnectToken(token)
+        if (!cancelled) {
+          setConnectToken(token.access_token)
+          setProviderCredentialId(token.provider_credential_id ?? null)
+        }
       } catch {
         if (!cancelled) {
           toast.error(t('accounts.connectError'))
@@ -79,6 +84,8 @@ export function BankConnectDialog({
           provider,
           undefined,
           supportsAssetSync ? { sync_assets: syncAssets } : undefined,
+          undefined,
+          providerCredentialId,
         )
       }
       invalidateFinancialQueries(queryClient)
@@ -93,6 +100,7 @@ export function BankConnectDialog({
 
   const handleClose = () => {
     setConnectToken(null)
+    setProviderCredentialId(null)
     onClose()
   }
 

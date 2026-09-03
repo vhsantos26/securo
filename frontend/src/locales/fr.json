@@ -58,7 +58,10 @@
     "archiveHint": "L'espace de travail est masqué de la liste et du sélecteur. Les données sont conservées.",
     "archiveSuccess": "Espace de travail archivé",
     "archiveConfirmTitle": "Archiver l'espace de travail ?",
-    "archiveConfirmDescription": "L'espace de travail « {{name}} » sera retiré de votre liste. Les données sont conservées et un administrateur pourra le restaurer ultérieurement."
+    "archiveConfirmDescription": "L'espace de travail « {{name}} » sera retiré de votre liste. Les données sont conservées et un administrateur pourra le restaurer ultérieurement.",
+    "integrations": {
+      "title": "Intégrations bancaires", "description": "Chaque espace de travail peut utiliser son propre compte développeur.", "statusWorkspace": "Configurée dans cet espace de travail ({{clientId}})", "statusEnvironment": "Utilise la configuration d’environnement héritée", "statusUnreadable": "Les identifiants doivent être configurés à nouveau", "statusUnconfigured": "Non configurée", "active": "Active", "inactive": "Inactive", "secretHint": "Le Client Secret est chiffré et ne peut pas être affiché après son enregistrement. Les éditeurs peuvent connecter des banques avec l’intégration active.", "clientId": "Client ID", "clientSecret": "Client Secret", "validating": "Validation…", "saveAndValidate": "Enregistrer et valider", "adoptConfirm": "L’intégration configurée sera validée avec chaque connexion existante avant la migration. Continuer ?", "adopting": "Migration…", "adoptExisting": "Adopter {{count}} connexion(s) existante(s)", "manageOnly": "Seul le propriétaire ou le gestionnaire peut configurer l’intégration.", "saveSuccess": "Pluggy configuré pour cet espace de travail", "saveError": "Impossible de valider les identifiants Pluggy", "adoptSuccess": "Les connexions Pluggy existantes ont été associées à l’espace de travail", "adoptError": "Impossible de migrer les connexions existantes"
+    }
   },
   "app": {
     "name": "Securo",

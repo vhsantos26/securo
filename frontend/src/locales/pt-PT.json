@@ -58,7 +58,30 @@
     "archiveHint": "O espaço de trabalho fica oculto da lista e do seletor. Os dados permanecem preservados.",
     "archiveSuccess": "Espaço de trabalho arquivado",
     "archiveConfirmTitle": "Arquivar espaço de trabalho?",
-    "archiveConfirmDescription": "O espaço de trabalho \"{{name}}\" será removido da tua lista. Os dados permanecem preservados e um administrador poderá restaurá-lo mais tarde."
+    "archiveConfirmDescription": "O espaço de trabalho \"{{name}}\" será removido da tua lista. Os dados permanecem preservados e um administrador poderá restaurá-lo mais tarde.",
+    "integrations": {
+      "title": "Integrações bancárias",
+      "description": "Cada espaço de trabalho pode usar a sua própria conta de programador.",
+      "statusWorkspace": "Configurada neste espaço de trabalho ({{clientId}})",
+      "statusEnvironment": "A usar a configuração legada do ambiente",
+      "statusUnreadable": "As credenciais têm de ser novamente configuradas",
+      "statusUnconfigured": "Não configurada",
+      "active": "Ativa",
+      "inactive": "Inativa",
+      "secretHint": "O Client Secret é encriptado e não pode ser consultado depois de guardado. Os editores podem ligar bancos através da integração ativa.",
+      "clientId": "Client ID",
+      "clientSecret": "Client Secret",
+      "validating": "A validar…",
+      "saveAndValidate": "Guardar e validar",
+      "adoptConfirm": "A integração configurada será validada com cada ligação existente antes da migração. Continuar?",
+      "adopting": "A migrar…",
+      "adoptExisting": "Adotar {{count}} ligação(ões) existente(s)",
+      "manageOnly": "Só o proprietário ou gestor deste espaço de trabalho pode configurar a integração.",
+      "saveSuccess": "Pluggy configurado para este espaço de trabalho",
+      "saveError": "Não foi possível validar as credenciais do Pluggy",
+      "adoptSuccess": "As ligações Pluggy existentes foram associadas ao espaço de trabalho",
+      "adoptError": "Não foi possível migrar as ligações existentes"
+    }
   },
   "app": {
     "name": "Securo",
