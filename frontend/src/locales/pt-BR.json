@@ -565,7 +565,10 @@
     "fxRateUsed": "Taxa de câmbio: {{rate}}",
     "refreshRates": "Atualizar taxas de câmbio",
     "ratesRefreshed": "Taxas de câmbio atualizadas",
-    "ratesError": "Erro ao atualizar taxas de câmbio"
+    "ratesError": "Erro ao atualizar taxas de câmbio",
+    "projectedIncome": "Entradas previstas",
+    "projectedExpenses": "Saídas previstas",
+    "accrualNote": "Transações de cartão de crédito são agrupadas pela data de vencimento da fatura (modo competência)."
   },
   "transactions": {
     "title": "Transações",
@@ -828,7 +831,10 @@
     "calendarTransfersExcluded": "Transferências não contam como receitas ou despesas",
     "invoiceBadge": "Cobrança {{number}}",
     "invoiceBadgeNoNumber": "Cobrança",
-    "invoiceBadgeTooltip": "Esta transação quita uma cobrança. Abrir."
+    "invoiceBadgeTooltip": "Esta transação quita uma cobrança. Abrir.",
+    "excludeFromReports": "Excluir dos relatórios",
+    "excludeFromReportsHint": "Esta transação não será contabilizada como receita ou despesa, mas continuará afetando o saldo da conta e permanecerá no histórico de transações.",
+    "excludedFromReports": "Fora dos relatórios"
   },
   "accounts": {
     "title": "Contas",
@@ -1131,7 +1137,9 @@
     "autoGenerate": "Gerar transações automaticamente",
     "autoGenerateHelp": "Cria uma transação sempre que esta conta vence. Desative para aguardar o lançamento real (por exemplo, da sincronização bancária) e mostrá-la apenas como prevista até lá.",
     "fxEstimate": "Estimativa baseada na última taxa de câmbio ({{rate}}). O valor final pode mudar.",
-    "confirmDeleteDescription": "A definição recorrente \"{{description}}\" será excluída permanentemente. As transações existentes permanecerão, mas perderão o vínculo recorrente. Esta ação não pode ser desfeita."
+    "confirmDeleteDescription": "A definição recorrente \"{{description}}\" será excluída permanentemente. As transações existentes permanecerão, mas perderão o vínculo recorrente. Esta ação não pode ser desfeita.",
+    "semiannual": "A cada 6 meses",
+    "biweekly": "A cada 2 semanas"
   },
   "rules": {
     "preview": "Pré-visualizar",
@@ -1233,7 +1241,14 @@
     "importConfirmTitle": "Import categorization rules?",
     "importConfirmDescription": "File {{file}} contains {{count}} rules.",
     "importOverwriteWarning": "Importing will overwrite your current categorization rules. This cannot be undone.",
-    "confirmOverwriteImport": "Overwrite and import"
+    "confirmOverwriteImport": "Overwrite and import",
+    "searchPlaceholder": "Buscar regras...",
+    "filterAllCategories": "Todas as categorias",
+    "filterAllStatuses": "Todos os status",
+    "filterActiveOnly": "Somente ativas",
+    "filterInactiveOnly": "Somente inativas",
+    "filterAllActions": "Todas as ações",
+    "noFilterResults": "Nenhuma regra corresponde a estes filtros"
   },
   "categories": {
     "title": "Categorias",
@@ -1362,7 +1377,20 @@
     "page": "Página {{current}} de {{total}}",
     "mapPayee": "Coluna da pessoa",
     "mapExternalId": "Coluna de ID da transação",
-    "mapNotes": "Coluna de notas"
+    "mapNotes": "Coluna de notas",
+    "failedRowsWarning": "{{count}} linha(s) neste arquivo não puderam ser analisadas e foram ignoradas.",
+    "viewDetails": "Ver detalhes",
+    "failedRowsTitle": "Linhas CSV não analisadas",
+    "failedRowsDesc": "As seguintes linhas no arquivo CSV foram ignoradas porque o formato de data ou valor não pôde ser reconhecido.",
+    "lineNumber": "Linha",
+    "rawValue": "Valor",
+    "errorReason": "Motivo",
+    "description": "Descrição",
+    "errors": {
+      "invalid_date": "Formato de data inválido",
+      "no_amount": "Nenhum valor de entrada ou saída",
+      "invalid_amount": "Formato de valor inválido"
+    }
   },
   "assetImport": {
     "title": "Importar ordens de investimento",
@@ -2011,7 +2039,11 @@
       "dateFormatMdyDesc": "Mês primeiro, ex.: 06/04/2026.",
       "dateFormatYmd": "Ano / Mês / Dia",
       "dateFormatYmdDesc": "Ordem ISO, ex.: 2026-06-04.",
-      "updated": "Configuração atualizada"
+      "updated": "Configuração atualizada",
+      "accountingCash": "Regime de caixa",
+      "accountingCashDesc": "Compras no cartão contam no dia em que acontecem (padrão).",
+      "accountingAccrual": "Regime de competência",
+      "accountingAccrualDesc": "Compras no cartão contam na data de vencimento da fatura — reflete o fluxo de caixa real."
     }
   },
   "onboarding": {

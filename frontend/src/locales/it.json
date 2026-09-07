@@ -60,7 +60,27 @@
     "archiveConfirmTitle": "Archiviare l'area di lavoro?",
     "archiveConfirmDescription": "L'area di lavoro \"{{name}}\" sarà rimossa dal tuo elenco. I dati vengono conservati e un amministratore potrà ripristinarla in seguito.",
     "integrations": {
-      "title": "Integrazioni bancarie", "description": "Ogni area di lavoro può usare il proprio account sviluppatore.", "statusWorkspace": "Configurata in questa area di lavoro ({{clientId}})", "statusEnvironment": "Usa la configurazione legacy dell’ambiente", "statusUnreadable": "Le credenziali devono essere configurate di nuovo", "statusUnconfigured": "Non configurata", "active": "Attiva", "inactive": "Inattiva", "secretHint": "Il Client Secret è crittografato e non può essere visualizzato dopo il salvataggio. Gli editor possono collegare banche con l’integrazione attiva.", "clientId": "Client ID", "clientSecret": "Client Secret", "validating": "Convalida…", "saveAndValidate": "Salva e convalida", "adoptConfirm": "L’integrazione configurata verrà convalidata per ogni connessione esistente prima della migrazione. Continuare?", "adopting": "Migrazione…", "adoptExisting": "Adotta {{count}} connessione/i esistente/i", "manageOnly": "Solo il proprietario o il responsabile può configurare l’integrazione.", "saveSuccess": "Pluggy configurato per questa area di lavoro", "saveError": "Impossibile convalidare le credenziali Pluggy", "adoptSuccess": "Le connessioni Pluggy esistenti sono state collegate all’area di lavoro", "adoptError": "Impossibile migrare le connessioni esistenti"
+      "title": "Integrazioni bancarie",
+      "description": "Ogni area di lavoro può usare il proprio account sviluppatore.",
+      "statusWorkspace": "Configurata in questa area di lavoro ({{clientId}})",
+      "statusEnvironment": "Usa la configurazione legacy dell’ambiente",
+      "statusUnreadable": "Le credenziali devono essere configurate di nuovo",
+      "statusUnconfigured": "Non configurata",
+      "active": "Attiva",
+      "inactive": "Inattiva",
+      "secretHint": "Il Client Secret è crittografato e non può essere visualizzato dopo il salvataggio. Gli editor possono collegare banche con l’integrazione attiva.",
+      "clientId": "Client ID",
+      "clientSecret": "Client Secret",
+      "validating": "Convalida…",
+      "saveAndValidate": "Salva e convalida",
+      "adoptConfirm": "L’integrazione configurata verrà convalidata per ogni connessione esistente prima della migrazione. Continuare?",
+      "adopting": "Migrazione…",
+      "adoptExisting": "Adotta {{count}} connessione/i esistente/i",
+      "manageOnly": "Solo il proprietario o il responsabile può configurare l’integrazione.",
+      "saveSuccess": "Pluggy configurato per questa area di lavoro",
+      "saveError": "Impossibile convalidare le credenziali Pluggy",
+      "adoptSuccess": "Le connessioni Pluggy esistenti sono state collegate all’area di lavoro",
+      "adoptError": "Impossibile migrare le connessioni esistenti"
     }
   },
   "app": {
@@ -545,7 +565,10 @@
     "fxRateUsed": "Tasso di cambio: {{rate}}",
     "refreshRates": "Aggiorna i tassi di cambio",
     "ratesRefreshed": "Tassi di cambio aggiornati",
-    "ratesError": "Impossibile aggiornare i tassi di cambio"
+    "ratesError": "Impossibile aggiornare i tassi di cambio",
+    "projectedIncome": "Entrate previste",
+    "projectedExpenses": "Spese previste",
+    "accrualNote": "Le transazioni con carta di credito sono raggruppate per scadenza dell'estratto conto (modalità per competenza)."
   },
   "transactions": {
     "title": "Transazioni",
@@ -808,7 +831,10 @@
     "calendarTransfersExcluded": "I trasferimenti non contano come entrate o spese",
     "invoiceBadge": "Invoice {{number}}",
     "invoiceBadgeNoNumber": "Invoice",
-    "invoiceBadgeTooltip": "This transaction settles an invoice. Open it."
+    "invoiceBadgeTooltip": "This transaction settles an invoice. Open it.",
+    "excludeFromReports": "Escludi dai report",
+    "excludeFromReportsHint": "Questa transazione non verrà conteggiata come entrata o uscita, ma continuerà a influire sul saldo del conto e resterà nella cronologia delle transazioni.",
+    "excludedFromReports": "Fuori dai report"
   },
   "accounts": {
     "title": "Conti",
@@ -1111,7 +1137,9 @@
     "autoGenerate": "Genera transazioni automaticamente",
     "autoGenerateHelp": "Crea una transazione ogni volta che questa spesa è in scadenza. Disattiva per attendere l'addebito reale (ad es. dalla sincronizzazione bancaria) e mostrarla solo come in arrivo fino ad allora.",
     "fxEstimate": "Stima basata sull'ultimo tasso di cambio ({{rate}}). L'importo finale può variare.",
-    "confirmDeleteDescription": "La definizione ricorrente \"{{description}}\" verrà eliminata definitivamente. Le transazioni esistenti rimarranno, ma perderanno il collegamento ricorrente. Questa azione non può essere annullata."
+    "confirmDeleteDescription": "La definizione ricorrente \"{{description}}\" verrà eliminata definitivamente. Le transazioni esistenti rimarranno, ma perderanno il collegamento ricorrente. Questa azione non può essere annullata.",
+    "semiannual": "Ogni 6 mesi",
+    "biweekly": "Ogni 2 settimane"
   },
   "rules": {
     "preview": "Anteprima",
@@ -1213,7 +1241,14 @@
     "importConfirmTitle": "Import categorization rules?",
     "importConfirmDescription": "File {{file}} contains {{count}} rules.",
     "importOverwriteWarning": "Importing will overwrite your current categorization rules. This cannot be undone.",
-    "confirmOverwriteImport": "Overwrite and import"
+    "confirmOverwriteImport": "Overwrite and import",
+    "searchPlaceholder": "Cerca regole...",
+    "filterAllCategories": "Tutte le categorie",
+    "filterAllStatuses": "Tutti gli stati",
+    "filterActiveOnly": "Solo attive",
+    "filterInactiveOnly": "Solo inattive",
+    "filterAllActions": "Tutte le azioni",
+    "noFilterResults": "Nessuna regola corrisponde a questi filtri"
   },
   "categories": {
     "title": "Categorie",
@@ -1342,7 +1377,20 @@
     "page": "Pagina {{current}} di {{total}}",
     "mapPayee": "Colonna del beneficiario",
     "mapExternalId": "Colonna dell'ID transazione",
-    "mapNotes": "Colonna delle note"
+    "mapNotes": "Colonna delle note",
+    "failedRowsWarning": "{{count}} riga/he in questo file non è stato possibile analizzare e sono state saltate.",
+    "viewDetails": "Visualizza dettagli",
+    "failedRowsTitle": "Righe CSV non analizzate",
+    "failedRowsDesc": "Le seguenti righe nel file CSV sono state saltate perché non è stato possibile riconoscere il formato della data o dell'importo.",
+    "lineNumber": "Riga",
+    "rawValue": "Valore",
+    "errorReason": "Motivo",
+    "description": "Descrizione",
+    "errors": {
+      "invalid_date": "Formato data non valido",
+      "no_amount": "Nessun importo in entrata o in uscita",
+      "invalid_amount": "Formato importo non valido"
+    }
   },
   "assetImport": {
     "title": "Importa ordini di investimento",
@@ -1991,7 +2039,11 @@
       "dateFormatMdyDesc": "Mese prima, es. 06/04/2026.",
       "dateFormatYmd": "Anno / Mese / Giorno",
       "dateFormatYmdDesc": "Ordine ISO, es. 2026-06-04.",
-      "updated": "Impostazione aggiornata"
+      "updated": "Impostazione aggiornata",
+      "accountingCash": "Per cassa",
+      "accountingCashDesc": "Gli acquisti con carta di credito contano il giorno in cui avvengono (predefinito).",
+      "accountingAccrual": "Per competenza",
+      "accountingAccrualDesc": "Gli acquisti con carta di credito contano alla data di scadenza dell'estratto conto — riflette il flusso di cassa effettivo."
     }
   },
   "onboarding": {

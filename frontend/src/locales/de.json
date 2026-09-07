@@ -60,7 +60,27 @@
     "archiveConfirmTitle": "Workspace archivieren?",
     "archiveConfirmDescription": "Der Workspace \"{{name}}\" wird aus deiner Liste entfernt. Die Daten bleiben erhalten und ein Administrator kann ihn später wiederherstellen.",
     "integrations": {
-      "title": "Bankintegrationen", "description": "Jeder Workspace kann ein eigenes Entwicklerkonto verwenden.", "statusWorkspace": "In diesem Workspace konfiguriert ({{clientId}})", "statusEnvironment": "Verwendet die ältere Umgebungskonfiguration", "statusUnreadable": "Die Zugangsdaten müssen erneut konfiguriert werden", "statusUnconfigured": "Nicht konfiguriert", "active": "Aktiv", "inactive": "Inaktiv", "secretHint": "Das Client Secret wird verschlüsselt und kann nach dem Speichern nicht angezeigt werden. Bearbeiter können Banken über die aktive Integration verbinden.", "clientId": "Client ID", "clientSecret": "Client Secret", "validating": "Wird validiert…", "saveAndValidate": "Speichern und validieren", "adoptConfirm": "Die konfigurierte Integration wird vor der Migration für jede bestehende Verbindung validiert. Fortfahren?", "adopting": "Wird migriert…", "adoptExisting": "{{count}} bestehende Verbindung(en) übernehmen", "manageOnly": "Nur der Eigentümer oder Manager dieses Workspace kann die Integration konfigurieren.", "saveSuccess": "Pluggy für diesen Workspace konfiguriert", "saveError": "Pluggy-Zugangsdaten konnten nicht validiert werden", "adoptSuccess": "Bestehende Pluggy-Verbindungen wurden dem Workspace zugeordnet", "adoptError": "Bestehende Verbindungen konnten nicht migriert werden"
+      "title": "Bankintegrationen",
+      "description": "Jeder Workspace kann ein eigenes Entwicklerkonto verwenden.",
+      "statusWorkspace": "In diesem Workspace konfiguriert ({{clientId}})",
+      "statusEnvironment": "Verwendet die ältere Umgebungskonfiguration",
+      "statusUnreadable": "Die Zugangsdaten müssen erneut konfiguriert werden",
+      "statusUnconfigured": "Nicht konfiguriert",
+      "active": "Aktiv",
+      "inactive": "Inaktiv",
+      "secretHint": "Das Client Secret wird verschlüsselt und kann nach dem Speichern nicht angezeigt werden. Bearbeiter können Banken über die aktive Integration verbinden.",
+      "clientId": "Client ID",
+      "clientSecret": "Client Secret",
+      "validating": "Wird validiert…",
+      "saveAndValidate": "Speichern und validieren",
+      "adoptConfirm": "Die konfigurierte Integration wird vor der Migration für jede bestehende Verbindung validiert. Fortfahren?",
+      "adopting": "Wird migriert…",
+      "adoptExisting": "{{count}} bestehende Verbindung(en) übernehmen",
+      "manageOnly": "Nur der Eigentümer oder Manager dieses Workspace kann die Integration konfigurieren.",
+      "saveSuccess": "Pluggy für diesen Workspace konfiguriert",
+      "saveError": "Pluggy-Zugangsdaten konnten nicht validiert werden",
+      "adoptSuccess": "Bestehende Pluggy-Verbindungen wurden dem Workspace zugeordnet",
+      "adoptError": "Bestehende Verbindungen konnten nicht migriert werden"
     }
   },
   "app": {
@@ -545,7 +565,10 @@
     "fxRateUsed": "Wechselkurs: {{rate}}",
     "refreshRates": "Wechselkurse aktualisieren",
     "ratesRefreshed": "Wechselkurse aktualisiert",
-    "ratesError": "Fehler beim Aktualisieren der Wechselkurse"
+    "ratesError": "Fehler beim Aktualisieren der Wechselkurse",
+    "projectedIncome": "Prognostizierte Einnahmen",
+    "projectedExpenses": "Prognostizierte Ausgaben",
+    "accrualNote": "Kreditkartentransaktionen werden nach dem Fälligkeitsdatum der Abrechnung gruppiert (Soll-Modus)."
   },
   "transactions": {
     "title": "Transaktionen",
@@ -808,7 +831,10 @@
     "calendarTransfersExcluded": "Umbuchungen zählen nicht als Einnahmen oder Ausgaben",
     "invoiceBadge": "Invoice {{number}}",
     "invoiceBadgeNoNumber": "Invoice",
-    "invoiceBadgeTooltip": "This transaction settles an invoice. Open it."
+    "invoiceBadgeTooltip": "This transaction settles an invoice. Open it.",
+    "excludeFromReports": "Aus Berichten ausschließen",
+    "excludeFromReportsHint": "Diese Transaktion wird nicht als Einnahme oder Ausgabe gezählt, wirkt sich aber weiterhin auf den Kontostand aus und bleibt im Transaktionsverlauf sichtbar.",
+    "excludedFromReports": "Nicht in Berichten"
   },
   "accounts": {
     "title": "Konten",
@@ -1111,7 +1137,9 @@
     "autoGenerate": "Transaktionen automatisch erstellen",
     "autoGenerateHelp": "Erstellt bei jeder Fälligkeit dieser Rechnung eine Transaktion. Deaktivieren, um auf die tatsächliche Belastung (z. B. aus der Banksynchronisierung) zu warten und sie bis dahin nur als anstehend anzuzeigen.",
     "fxEstimate": "Schätzung basierend auf dem aktuellsten Wechselkurs ({{rate}}). Der endgültige Betrag kann abweichen.",
-    "confirmDeleteDescription": "Die wiederkehrende Transaktion \"{{description}}\" wird dauerhaft gelöscht. Vorhandene Transaktionen bleiben bestehen, verlieren jedoch ihre Verknüpfung zur wiederkehrenden Transaktion. Diese Aktion kann nicht rückgängig gemacht werden."
+    "confirmDeleteDescription": "Die wiederkehrende Transaktion \"{{description}}\" wird dauerhaft gelöscht. Vorhandene Transaktionen bleiben bestehen, verlieren jedoch ihre Verknüpfung zur wiederkehrenden Transaktion. Diese Aktion kann nicht rückgängig gemacht werden.",
+    "semiannual": "Alle 6 Monate",
+    "biweekly": "Alle 2 Wochen"
   },
   "rules": {
     "preview": "Vorschau",
@@ -1213,7 +1241,14 @@
     "importConfirmTitle": "Kategorisierungsregeln importieren?",
     "importConfirmDescription": "Die Datei {{file}} enthält {{count}} Regeln.",
     "importOverwriteWarning": "Der Import überschreibt deine aktuellen Kategorisierungsregeln. Dies kann nicht rückgängig gemacht werden.",
-    "confirmOverwriteImport": "Überschreiben und importieren"
+    "confirmOverwriteImport": "Überschreiben und importieren",
+    "searchPlaceholder": "Regeln suchen...",
+    "filterAllCategories": "Alle Kategorien",
+    "filterAllStatuses": "Alle Status",
+    "filterActiveOnly": "Nur aktive",
+    "filterInactiveOnly": "Nur inaktive",
+    "filterAllActions": "Alle Aktionen",
+    "noFilterResults": "Keine Regel entspricht diesen Filtern"
   },
   "categories": {
     "title": "Kategorien",
@@ -1342,7 +1377,20 @@
     "page": "Seite {{current}} von {{total}}",
     "mapPayee": "Spalte Zahlungsempfänger",
     "mapExternalId": "Spalte Transaktions-ID",
-    "mapNotes": "Spalte Notizen"
+    "mapNotes": "Spalte Notizen",
+    "failedRowsWarning": "{{count}} Zeile(n) in dieser Datei konnten nicht analysiert werden und wurden übersprungen.",
+    "viewDetails": "Details anzeigen",
+    "failedRowsTitle": "Nicht analysierte CSV-Zeilen",
+    "failedRowsDesc": "Die folgenden Zeilen in der CSV-Datei wurden übersprungen, da ihr Datums- oder Betragsformat nicht erkannt werden konnte.",
+    "lineNumber": "Zeile",
+    "rawValue": "Wert",
+    "errorReason": "Grund",
+    "description": "Beschreibung",
+    "errors": {
+      "invalid_date": "Ungültiges Datumsformat",
+      "no_amount": "Kein Zu- oder Abflussbetrag",
+      "invalid_amount": "Ungültiges Betragsformat"
+    }
   },
   "assetImport": {
     "title": "Wertpapierorders importieren",
@@ -1991,7 +2039,11 @@
       "dateFormatMdyDesc": "Monat zuerst, z.B. 06/04/2026.",
       "dateFormatYmd": "Jahr / Monat / Tag",
       "dateFormatYmdDesc": "ISO-Reihenfolge, z.B. 2026-06-04.",
-      "updated": "Einstellung aktualisiert"
+      "updated": "Einstellung aktualisiert",
+      "accountingCash": "Ist-Versteuerung (Cash-Basis)",
+      "accountingCashDesc": "Kreditkartenkäufe zählen am Tag des Kaufs (Standard).",
+      "accountingAccrual": "Soll-Versteuerung (Accrual-Basis)",
+      "accountingAccrualDesc": "Kreditkartenkäufe zählen am Fälligkeitstag der Abrechnung — spiegelt den tatsächlichen Geldfluss wider."
     }
   },
   "onboarding": {
