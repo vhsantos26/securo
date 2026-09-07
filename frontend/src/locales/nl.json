@@ -60,7 +60,27 @@
     "archiveConfirmDescription": "De workspace \"{{name}}\" wordt uit uw lijst verwijderd. Gegevens blijven behouden en een beheerder kan deze later herstellen.",
     "addMemberDescriptionExistingOnly": "Nodig een bestaande gebruiker uit via e-mail.",
     "integrations": {
-      "title": "Bankintegraties", "description": "Elke workspace kan een eigen ontwikkelaarsaccount gebruiken.", "statusWorkspace": "Geconfigureerd in deze workspace ({{clientId}})", "statusEnvironment": "Gebruikt verouderde omgevingsconfiguratie", "statusUnreadable": "De gegevens moeten opnieuw worden geconfigureerd", "statusUnconfigured": "Niet geconfigureerd", "active": "Actief", "inactive": "Inactief", "secretHint": "Het Client Secret is versleuteld en kan na het opslaan niet worden bekeken. Editors kunnen banken koppelen met de actieve integratie.", "clientId": "Client ID", "clientSecret": "Client Secret", "validating": "Valideren…", "saveAndValidate": "Opslaan en valideren", "adoptConfirm": "De geconfigureerde integratie wordt vóór de migratie voor elke bestaande verbinding gevalideerd. Doorgaan?", "adopting": "Migreren…", "adoptExisting": "{{count}} bestaande verbinding(en) overnemen", "manageOnly": "Alleen de eigenaar of manager kan de integratie configureren.", "saveSuccess": "Pluggy geconfigureerd voor deze workspace", "saveError": "Pluggy-gegevens konden niet worden gevalideerd", "adoptSuccess": "Bestaande Pluggy-verbindingen zijn aan de workspace gekoppeld", "adoptError": "Bestaande verbindingen konden niet worden gemigreerd"
+      "title": "Bankintegraties",
+      "description": "Elke workspace kan een eigen ontwikkelaarsaccount gebruiken.",
+      "statusWorkspace": "Geconfigureerd in deze workspace ({{clientId}})",
+      "statusEnvironment": "Gebruikt verouderde omgevingsconfiguratie",
+      "statusUnreadable": "De gegevens moeten opnieuw worden geconfigureerd",
+      "statusUnconfigured": "Niet geconfigureerd",
+      "active": "Actief",
+      "inactive": "Inactief",
+      "secretHint": "Het Client Secret is versleuteld en kan na het opslaan niet worden bekeken. Editors kunnen banken koppelen met de actieve integratie.",
+      "clientId": "Client ID",
+      "clientSecret": "Client Secret",
+      "validating": "Valideren…",
+      "saveAndValidate": "Opslaan en valideren",
+      "adoptConfirm": "De geconfigureerde integratie wordt vóór de migratie voor elke bestaande verbinding gevalideerd. Doorgaan?",
+      "adopting": "Migreren…",
+      "adoptExisting": "{{count}} bestaande verbinding(en) overnemen",
+      "manageOnly": "Alleen de eigenaar of manager kan de integratie configureren.",
+      "saveSuccess": "Pluggy geconfigureerd voor deze workspace",
+      "saveError": "Pluggy-gegevens konden niet worden gevalideerd",
+      "adoptSuccess": "Bestaande Pluggy-verbindingen zijn aan de workspace gekoppeld",
+      "adoptError": "Bestaande verbindingen konden niet worden gemigreerd"
     }
   },
   "app": {
@@ -545,7 +565,10 @@
     "fxRateUsed": "Wisselkoers: {{rate}}",
     "refreshRates": "Vernieuw de wisselkoersen",
     "ratesRefreshed": "FX-tarieven bijgewerkt",
-    "ratesError": "Kan de valutakoersen niet updaten"
+    "ratesError": "Kan de valutakoersen niet updaten",
+    "projectedIncome": "Geprojecteerd inkomen",
+    "projectedExpenses": "Geprojecteerde uitgaven",
+    "accrualNote": "Creditcardtransacties worden gegroepeerd op vervaldatum van de factuur (toerekeningsmodus)."
   },
   "transactions": {
     "title": "Transacties",
@@ -808,7 +831,10 @@
     "calendarTransfersExcluded": "Overdrachten worden niet meegeteld als inkomsten of uitgaven",
     "invoiceBadge": "Invoice {{number}}",
     "invoiceBadgeNoNumber": "Invoice",
-    "invoiceBadgeTooltip": "This transaction settles an invoice. Open it."
+    "invoiceBadgeTooltip": "This transaction settles an invoice. Open it.",
+    "excludeFromReports": "Uitsluiten van rapporten",
+    "excludeFromReportsHint": "Deze transactie wordt niet als inkomen of uitgave meegerekend, maar heeft nog steeds invloed op het rekeningsaldo en blijft zichtbaar in de transactiegeschiedenis.",
+    "excludedFromReports": "Niet in rapporten"
   },
   "accounts": {
     "title": "Rekeningen",
@@ -961,7 +987,8 @@
         "description": "Amerikaanse en internationale banken via SimpleFIN Bridge"
       }
     },
-    "reconnected": "Bank heeft opnieuw verbinding gemaakt"
+    "reconnected": "Bank heeft opnieuw verbinding gemaakt",
+    "multiInstitutionLink": "{{provider}} · {{count}} institutions"
   },
   "connections": {
     "settings": "Verbindingsinstellingen",
@@ -1111,7 +1138,9 @@
     "autoGenerateHelp": "Maak een transactie aan elke keer dat deze rekening moet worden betaald. Schakel uit om te wachten op de werkelijke afschrijving (bijvoorbeeld via banksynchronisatie) en toon deze tot die tijd alleen als aankomend.",
     "fxEstimate": "Schatting gebaseerd op de laatste wisselkoers ({{rate}}). Het eindbedrag kan veranderen.",
     "confirmDeleteTitle": "Terugkerende transactie verwijderen?",
-    "confirmDeleteDescription": "De terugkerende definitie \"{{description}}\" wordt permanent verwijderd. Bestaande transacties blijven bestaan, maar verliezen hun koppeling met de terugkerende transactie. Deze actie kan niet ongedaan worden gemaakt."
+    "confirmDeleteDescription": "De terugkerende definitie \"{{description}}\" wordt permanent verwijderd. Bestaande transacties blijven bestaan, maar verliezen hun koppeling met de terugkerende transactie. Deze actie kan niet ongedaan worden gemaakt.",
+    "semiannual": "Elke 6 maanden",
+    "biweekly": "Elke 2 weken"
   },
   "rules": {
     "preview": "Voorbeeld",
@@ -1213,7 +1242,14 @@
     "importOverwriteWarning": "Als u importeert, worden uw huidige categorisatieregels overschreven. Dit kan niet ongedaan worden gemaakt.",
     "confirmOverwriteImport": "Overschrijven en importeren",
     "confirmDeleteTitle": "Regel verwijderen?",
-    "confirmDeleteDescription": "De regel \"{{name}}\" wordt permanent verwijderd en wordt niet meer uitgevoerd. Wijzigingen die al op bestaande transacties zijn toegepast, blijven behouden. Deze actie kan niet ongedaan worden gemaakt."
+    "confirmDeleteDescription": "De regel \"{{name}}\" wordt permanent verwijderd en wordt niet meer uitgevoerd. Wijzigingen die al op bestaande transacties zijn toegepast, blijven behouden. Deze actie kan niet ongedaan worden gemaakt.",
+    "searchPlaceholder": "Regels zoeken...",
+    "filterAllCategories": "Alle categorieën",
+    "filterAllStatuses": "Alle statussen",
+    "filterActiveOnly": "Alleen actief",
+    "filterInactiveOnly": "Alleen inactief",
+    "filterAllActions": "Alle acties",
+    "noFilterResults": "Geen regel voldoet aan deze filters"
   },
   "categories": {
     "title": "Categorieën",
@@ -1342,7 +1378,20 @@
     "page": "Pagina {{current}} van {{total}}",
     "mapPayee": "Kolom begunstigde",
     "mapExternalId": "Kolom Transactie-ID",
-    "mapNotes": "Kolom Opmerkingen"
+    "mapNotes": "Kolom Opmerkingen",
+    "failedRowsWarning": "{{count}} row(s) in this file could not be parsed and were skipped.",
+    "viewDetails": "View details",
+    "failedRowsTitle": "Unparsed CSV Rows",
+    "failedRowsDesc": "The following rows in the CSV file were skipped because their date or amount format could not be recognized.",
+    "lineNumber": "Line",
+    "rawValue": "Value",
+    "errorReason": "Reason",
+    "description": "Omschrijving",
+    "errors": {
+      "invalid_date": "Ongeldige datumformaat",
+      "no_amount": "Geen in- of uitstroombedrag",
+      "invalid_amount": "Ongeldig bedragformaat"
+    }
   },
   "assetImport": {
     "title": "Investeringsorders importeren",
@@ -1991,7 +2040,11 @@
       "dateFormatMdyDesc": "Maand eerst, b.v. 06/04/2026.",
       "dateFormatYmd": "Jaar / Maand / Dag",
       "dateFormatYmdDesc": "ISO-volgorde, b.v. 04-06-2026.",
-      "updated": "Instelling bijgewerkt"
+      "updated": "Instelling bijgewerkt",
+      "accountingCash": "Contante basis",
+      "accountingCashDesc": "Creditcardaankopen tellen mee op de dag dat ze plaatsvinden (standaard).",
+      "accountingAccrual": "Op transactiebasis",
+      "accountingAccrualDesc": "Creditcardaankopen tellen mee voor de vervaldatum van de factuur en weerspiegelen de werkelijke cashflow."
     }
   },
   "onboarding": {

@@ -565,7 +565,10 @@
     "fxRateUsed": "FX rate: {{rate}}",
     "refreshRates": "Refresh FX rates",
     "ratesRefreshed": "FX rates updated",
-    "ratesError": "Failed to update FX rates"
+    "ratesError": "Failed to update FX rates",
+    "projectedIncome": "Projected Income",
+    "projectedExpenses": "Projected Expenses",
+    "accrualNote": "Credit-card transactions are grouped by bill due date (accrual mode)."
   },
   "transactions": {
     "title": "Transactions",
@@ -828,7 +831,10 @@
     "calendarTransfersExcluded": "Transfers are not counted as income or expenses",
     "invoiceBadge": "Invoice {{number}}",
     "invoiceBadgeNoNumber": "Invoice",
-    "invoiceBadgeTooltip": "This transaction settles an invoice. Open it."
+    "invoiceBadgeTooltip": "This transaction settles an invoice. Open it.",
+    "excludeFromReports": "Exclude from reports",
+    "excludeFromReportsHint": "This transaction will not count as income or expense, but it will still affect the account balance and remain in the transaction history.",
+    "excludedFromReports": "Not in reports"
   },
   "accounts": {
     "title": "Accounts",
@@ -1130,7 +1136,9 @@
     "autoGenerate": "Generate transactions automatically",
     "autoGenerateHelp": "Create a transaction each time this bill is due. Turn off to wait for the real charge (e.g. from bank sync) and only show it as upcoming until then.",
     "fxEstimate": "Estimate based on latest exchange rate ({{rate}}). Final amount may change.",
-    "confirmDeleteDescription": "The recurring definition \"{{description}}\" will be permanently deleted. Existing transactions will remain but lose their recurring link. This action cannot be undone."
+    "confirmDeleteDescription": "The recurring definition \"{{description}}\" will be permanently deleted. Existing transactions will remain but lose their recurring link. This action cannot be undone.",
+    "semiannual": "Every 6 months",
+    "biweekly": "Every 2 weeks"
   },
   "rules": {
     "preview": "Preview",
@@ -1232,7 +1240,14 @@
     "importConfirmTitle": "Import categorization rules?",
     "importConfirmDescription": "File {{file}} contains {{count}} rules.",
     "importOverwriteWarning": "Importing will overwrite your current categorization rules. This cannot be undone.",
-    "confirmOverwriteImport": "Overwrite and import"
+    "confirmOverwriteImport": "Overwrite and import",
+    "searchPlaceholder": "Search rules...",
+    "filterAllCategories": "All categories",
+    "filterAllStatuses": "All statuses",
+    "filterActiveOnly": "Active only",
+    "filterInactiveOnly": "Inactive only",
+    "filterAllActions": "All actions",
+    "noFilterResults": "No rule matches these filters"
   },
   "categories": {
     "title": "Categories",
@@ -1361,7 +1376,20 @@
     "page": "Page {{current}} of {{total}}",
     "mapPayee": "Payee column",
     "mapExternalId": "Transaction ID column",
-    "mapNotes": "Notes column"
+    "mapNotes": "Notes column",
+    "failedRowsWarning": "{{count}} row(s) in this file could not be parsed and were skipped.",
+    "viewDetails": "View details",
+    "failedRowsTitle": "Unparsed CSV Rows",
+    "failedRowsDesc": "The following rows in the CSV file were skipped because their date or amount format could not be recognized.",
+    "lineNumber": "Line",
+    "rawValue": "Value",
+    "errorReason": "Reason",
+    "description": "Description",
+    "errors": {
+      "invalid_date": "Invalid Date Format",
+      "no_amount": "No Inflow or Outflow Amount",
+      "invalid_amount": "Invalid Amount Format"
+    }
   },
   "assetImport": {
     "title": "Import investment orders",
@@ -2010,7 +2038,11 @@
       "dateFormatMdyDesc": "Month first, e.g. 06/04/2026.",
       "dateFormatYmd": "Year / Month / Day",
       "dateFormatYmdDesc": "ISO order, e.g. 2026-06-04.",
-      "updated": "Setting updated"
+      "updated": "Setting updated",
+      "accountingCash": "Cash basis",
+      "accountingCashDesc": "Credit card purchases count on the day they happen (default).",
+      "accountingAccrual": "Accrual basis",
+      "accountingAccrualDesc": "Credit card purchases count on the bill's due date — reflects actual cash flow."
     }
   },
   "onboarding": {

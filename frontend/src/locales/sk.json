@@ -60,7 +60,27 @@
     "archiveConfirmTitle": "Archivovať pracovný priestor?",
     "archiveConfirmDescription": "Pracovný priestor „{{name}}“ sa odstráni z tvojho zoznamu. Údaje zostanú zachované a správca ho môže neskôr obnoviť.",
     "integrations": {
-      "title": "Bankové integrácie", "description": "Každý pracovný priestor môže používať vlastný účet vývojára.", "statusWorkspace": "Nakonfigurované v tomto pracovnom priestore ({{clientId}})", "statusEnvironment": "Používa staršiu konfiguráciu prostredia", "statusUnreadable": "Prihlasovacie údaje treba znova nakonfigurovať", "statusUnconfigured": "Nenakonfigurované", "active": "Aktívne", "inactive": "Neaktívne", "secretHint": "Client Secret je šifrovaný a po uložení sa nedá zobraziť. Editori môžu pripájať banky pomocou aktívnej integrácie.", "clientId": "Client ID", "clientSecret": "Client Secret", "validating": "Overovanie…", "saveAndValidate": "Uložiť a overiť", "adoptConfirm": "Nakonfigurovaná integrácia bude pred migráciou overená pre každé existujúce pripojenie. Pokračovať?", "adopting": "Migrácia…", "adoptExisting": "Prevziať {{count}} existujúce pripojenie(a)", "manageOnly": "Integráciu môže konfigurovať iba vlastník alebo správca pracovného priestoru.", "saveSuccess": "Pluggy je nakonfigurovaný pre tento pracovný priestor", "saveError": "Nepodarilo sa overiť prihlasovacie údaje Pluggy", "adoptSuccess": "Existujúce pripojenia Pluggy boli priradené k pracovnému priestoru", "adoptError": "Nepodarilo sa migrovať existujúce pripojenia"
+      "title": "Bankové integrácie",
+      "description": "Každý pracovný priestor môže používať vlastný účet vývojára.",
+      "statusWorkspace": "Nakonfigurované v tomto pracovnom priestore ({{clientId}})",
+      "statusEnvironment": "Používa staršiu konfiguráciu prostredia",
+      "statusUnreadable": "Prihlasovacie údaje treba znova nakonfigurovať",
+      "statusUnconfigured": "Nenakonfigurované",
+      "active": "Aktívne",
+      "inactive": "Neaktívne",
+      "secretHint": "Client Secret je šifrovaný a po uložení sa nedá zobraziť. Editori môžu pripájať banky pomocou aktívnej integrácie.",
+      "clientId": "Client ID",
+      "clientSecret": "Client Secret",
+      "validating": "Overovanie…",
+      "saveAndValidate": "Uložiť a overiť",
+      "adoptConfirm": "Nakonfigurovaná integrácia bude pred migráciou overená pre každé existujúce pripojenie. Pokračovať?",
+      "adopting": "Migrácia…",
+      "adoptExisting": "Prevziať {{count}} existujúce pripojenie(a)",
+      "manageOnly": "Integráciu môže konfigurovať iba vlastník alebo správca pracovného priestoru.",
+      "saveSuccess": "Pluggy je nakonfigurovaný pre tento pracovný priestor",
+      "saveError": "Nepodarilo sa overiť prihlasovacie údaje Pluggy",
+      "adoptSuccess": "Existujúce pripojenia Pluggy boli priradené k pracovnému priestoru",
+      "adoptError": "Nepodarilo sa migrovať existujúce pripojenia"
     }
   },
   "app": {
@@ -553,7 +573,10 @@
     "fxRateUsed": "Kurz: {{rate}}",
     "refreshRates": "Obnoviť kurzy",
     "ratesRefreshed": "Kurzy aktualizované",
-    "ratesError": "Kurzy sa nepodarilo aktualizovať"
+    "ratesError": "Kurzy sa nepodarilo aktualizovať",
+    "projectedIncome": "Očakávaný príjem",
+    "projectedExpenses": "Očakávané výdavky",
+    "accrualNote": "Transakcie kreditnou kartou sú zoskupené podľa dátumu splatnosti výpisu (akruálny režim)."
   },
   "transactions": {
     "title": "Transakcie",
@@ -852,7 +875,10 @@
     "calendarTransfersExcluded": "Prevody sa nepočítajú ako príjem ani výdavok",
     "invoiceBadge": "Faktúra {{number}}",
     "invoiceBadgeNoNumber": "Faktúra",
-    "invoiceBadgeTooltip": "Táto transakcia vyrovnáva faktúru. Otvorte ju."
+    "invoiceBadgeTooltip": "Táto transakcia vyrovnáva faktúru. Otvorte ju.",
+    "excludeFromReports": "Vylúčiť z reportov",
+    "excludeFromReportsHint": "Táto transakcia sa nebude započítavať ako príjem ani výdavok, ale naďalej ovplyvní zostatok účtu a zostane v histórii transakcií.",
+    "excludedFromReports": "Mimo výkazov"
   },
   "accounts": {
     "title": "Účty",
@@ -1182,7 +1208,9 @@
     "autoGenerate": "Generovať transakcie automaticky",
     "autoGenerateHelp": "Vytvorí transakciu vždy, keď je táto platba splatná. Vypni, ak chceš počkať na skutočnú platbu (napr. zo synchronizácie banky) a dovtedy ju zobrazovať len ako nadchádzajúcu.",
     "fxEstimate": "Odhad podľa posledného výmenného kurzu ({{rate}}). Konečná suma sa môže zmeniť.",
-    "confirmDeleteDescription": "Opakovaná definícia „{{description}}“ bude natrvalo vymazaná. Existujúce transakcie zostanú, ale stratia prepojenie na opakovanie. Túto akciu nie je možné vrátiť späť."
+    "confirmDeleteDescription": "Opakovaná definícia „{{description}}“ bude natrvalo vymazaná. Existujúce transakcie zostanú, ale stratia prepojenie na opakovanie. Túto akciu nie je možné vrátiť späť.",
+    "semiannual": "Každých 6 mesiacov",
+    "biweekly": "Každé 2 týždne"
   },
   "rules": {
     "preview": "Náhľad",
@@ -1296,7 +1324,14 @@
     "importConfirmTitle": "Importovať pravidlá kategorizácie?",
     "importConfirmDescription": "Počet pravidiel v súbore {{file}}: {{count}}.",
     "importOverwriteWarning": "Import prepíše tvoje aktuálne pravidlá kategorizácie. Túto akciu nie je možné vrátiť späť.",
-    "confirmOverwriteImport": "Prepísať a importovať"
+    "confirmOverwriteImport": "Prepísať a importovať",
+    "searchPlaceholder": "Hľadať pravidlá...",
+    "filterAllCategories": "Všetky kategórie",
+    "filterAllStatuses": "Všetky stavy",
+    "filterActiveOnly": "Iba aktívne",
+    "filterInactiveOnly": "Iba neaktívne",
+    "filterAllActions": "Všetky akcie",
+    "noFilterResults": "Žiadne pravidlo nezodpovedá týmto filtrom"
   },
   "categories": {
     "title": "Kategórie",
@@ -1449,7 +1484,20 @@
     "page": "Strana {{current}} z {{total}}",
     "mapPayee": "Stĺpec príjemcu",
     "mapExternalId": "Stĺpec ID transakcie",
-    "mapNotes": "Stĺpec poznámky"
+    "mapNotes": "Stĺpec poznámky",
+    "failedRowsWarning": "{{count}} riadok(ov) v tomto súbore sa nepodarilo spracovať a boli preskočené.",
+    "viewDetails": "Zobraziť podrobnosti",
+    "failedRowsTitle": "Nespracované riadky CSV",
+    "failedRowsDesc": "Nasledujúce riadky v súbore CSV boli preskočené, pretože sa nepodarilo rozpoznať formát dátumu alebo sumy.",
+    "lineNumber": "Riadok",
+    "rawValue": "Hodnota",
+    "errorReason": "Dôvod",
+    "description": "Popis",
+    "errors": {
+      "invalid_date": "Neplatný formát dátumu",
+      "no_amount": "Chýba suma príjmu alebo výdaja",
+      "invalid_amount": "Neplatný formát sumy"
+    }
   },
   "assetImport": {
     "title": "Import investičných pokynov",
@@ -2118,7 +2166,11 @@
       "dateFormatMdyDesc": "Najprv mesiac, napr. 06/04/2026.",
       "dateFormatYmd": "Rok / Mesiac / Deň",
       "dateFormatYmdDesc": "Poradie ISO, napr. 2026-06-04.",
-      "updated": "Nastavenie aktualizované"
+      "updated": "Nastavenie aktualizované",
+      "accountingCash": "Hotovostný princíp",
+      "accountingCashDesc": "Nákupy kreditnou kartou sa započítajú v deň, keď sa uskutočnia (predvolené).",
+      "accountingAccrual": "Akruálny princíp",
+      "accountingAccrualDesc": "Nákupy kreditnou kartou sa započítajú v deň splatnosti výpisu — odráža skutočný cash flow."
     }
   },
   "onboarding": {
