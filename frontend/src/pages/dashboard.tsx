@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { getAccountName, sumAccountBalances } from '@/lib/account-utils'
+import { getAccountLabel, getAccountName, sumAccountBalances } from '@/lib/account-utils'
 import { currentMonth, shiftMonth, monthLastDay, monthLabel, monthRange } from '@/lib/month-utils'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
@@ -38,7 +38,7 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { CheckCircle2, CalendarIcon, Clock, Paperclip, Target, ArrowUpDown, HelpCircle, EyeClosed } from 'lucide-react'
+import { CheckCircle2, CalendarIcon, Clock, Paperclip, Target, ArrowUpDown, HelpCircle, EyeClosed, AlertCircle } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ICON_MAP } from '@/lib/category-icons'
 import { PageHeader } from '@/components/page-header'
@@ -262,7 +262,7 @@ export default function DashboardPage() {
     queryFn: categoryGroupsApi.list,
   })
 
-  const { data: accountsList } = useQuery({
+  const { data: accountsList, isLoading: accountsLoading, isError: accountsError } = useQuery({
     queryKey: ['accounts'],
     queryFn: () => accountsApi.list(),
   })
@@ -411,13 +411,27 @@ export default function DashboardPage() {
   const zeroBalanceAccounts = availableBalanceAccounts.filter(
     (a) => Math.abs(Number(a.balance_primary ?? a.current_balance)) < 0.01,
   )
+  // While accounts are loading or failed to load, treat their balance
+  // components as unavailable rather than silently rendering zero.
+  const accountsUnavailable = accountsLoading || accountsError
   const creditCardBalance = sumAccountBalances(
     (accountsList ?? []).filter((a) => (activeAccountIds ? activeAccountIds.includes(a.id) : true) && a.type === 'credit_card'),
+  )
+  // Net worth's "Available balance" breakdown row: every non-card account
+  // (unlike the headline `availableBalance`, which is checking/savings only),
+  // so it reconciles with `totalBalance` — which sums all account types.
+  const nonCardAccountsBalance = sumAccountBalances(
+    (accountsList ?? []).filter((a) => (activeAccountIds ? activeAccountIds.includes(a.id) : true) && a.type !== 'credit_card'),
   )
 
   // Savings rate & projection
   const income = Number(summary?.monthly_income_primary ?? summary?.monthly_income ?? 0)
   const expenses = Number(summary?.monthly_expenses_primary ?? summary?.monthly_expenses ?? 0)
+  // What the month is still expected to close at, once recurring entries that
+  // have not posted yet are counted. Rendered only when it differs from the
+  // realised figure, so a month with nothing pending stays quiet.
+  const projectedIncome = Number(summary?.projected_income_primary ?? summary?.projected_income ?? income)
+  const projectedExpenses = Number(summary?.projected_expenses_primary ?? summary?.projected_expenses ?? expenses)
   const savingsRate = income > 0 ? ((income - expenses) / income) * 100 : 0
   const isCurrentMonth = selectedMonth === currentMonth()
   const daysElapsed = isCurrentMonth ? new Date().getDate() : monthLastDay(selectedMonth)
@@ -651,24 +665,45 @@ export default function DashboardPage() {
         {/* Available balance in checking/savings accounts */}
         <div className="pb-4 mb-4 border-b border-border">
           <p className="text-xs font-semibold text-muted-foreground mb-1">{t('dashboard.availableBalance')}</p>
-          {summaryLoading ? (
-            <Skeleton className="h-11 w-40" />
+          {summaryLoading || accountsUnavailable ? (
+            <Skeleton className="h-9 w-40" />
           ) : (
             <>
-              <p className={`text-4xl font-bold tabular-nums leading-tight ${availableBalance < 0 ? 'text-rose-500' : 'text-emerald-600'}`}>
+              {/* Neutral while positive. Size and weight carry the headline;
+                  colour is left to mean direction (income, expenses) and
+                  exception (a negative balance), so it still says something
+                  when it does appear. */}
+              <p className={`text-3xl font-bold tabular-nums leading-tight ${availableBalance < 0 ? 'text-rose-500' : 'text-foreground'}`}>
                 {mask(formatCurrency(availableBalance, primaryCurrency, locale))}
               </p>
               {(nonZeroBalanceAccounts.length > 0 || zeroBalanceAccounts.length > 0) && (
-                <div className="flex flex-wrap items-center gap-2 mt-2.5">
+                <div className="flex flex-wrap items-center gap-1.5 mt-3">
                   {nonZeroBalanceAccounts.map((acc) => {
                     const bal = Number(acc.balance_primary ?? acc.current_balance)
+                    const balCurrency = acc.balance_primary != null ? primaryCurrency : acc.currency
+                    // A link, not a click handler: the chip is a navigation
+                    // target, so it gets keyboard focus and cmd-click into a
+                    // new tab for free. Scale on hover only, which the
+                    // compositor handles without touching layout.
                     return (
-                      <span key={acc.id} className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-muted text-foreground">
-                        {getAccountName(acc)}
-                        <span className={`font-bold tabular-nums ${bal < 0 ? 'text-rose-500' : 'text-emerald-600'}`}>
-                          {mask(`${bal >= 0 ? '+' : ''}${formatCurrency(bal, acc.currency, locale)}`)}
+                      <Link
+                        key={acc.id}
+                        to={`/accounts/${acc.id}`}
+                        className="group inline-flex items-center gap-1 text-[11px] pl-1 pr-2 py-0.5 rounded-full border border-border bg-background transition-transform duration-150 ease-out hover:scale-105 hover:border-foreground/25 focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]"
+                      >
+                        {/* The bank mark is what the eye actually sorts on in a
+                            row of chips; the name is the confirmation. Falls
+                            back to the account-type icon, so manual accounts
+                            and providers without a logo still line up. */}
+                        <AccountIcon account={acc} size="xs" className="w-4 h-4 rounded-md" />
+                        {/* getAccountLabel, not getAccountName: two accounts can
+                            share a name, and the mask suffix is what tells them
+                            apart in a row of chips. */}
+                        <span className="text-muted-foreground group-hover:text-foreground transition-colors">{getAccountLabel(acc)}</span>
+                        <span className={`font-semibold tabular-nums ${bal < 0 ? 'text-rose-500' : 'text-foreground'}`}>
+                          {mask(formatCurrency(bal, balCurrency, locale))}
                         </span>
-                      </span>
+                      </Link>
                     )
                   })}
                   {zeroBalanceAccounts.length > 0 && (
@@ -698,9 +733,7 @@ export default function DashboardPage() {
               {summary && Math.abs(summary.pending_shares_net) >= 0.01 && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <p className={`text-xs tabular-nums mt-2 inline-block cursor-help underline decoration-dotted underline-offset-2 ${
-                      summary.pending_shares_net < 0 ? 'text-rose-500' : 'text-emerald-600'
-                    }`}>
+                    <p className="text-xs tabular-nums mt-2.5 inline-block cursor-help text-muted-foreground underline decoration-dotted underline-offset-2">
                       {summary.pending_shares_net < 0
                         ? t('dashboard.pendingSharesOwe', {
                             net: mask(formatCurrency(availableBalance + summary.pending_shares_net, primaryCurrency, locale)),
@@ -720,10 +753,11 @@ export default function DashboardPage() {
         </div>
 
         {/* Secondary indicators */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-x-5 gap-y-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-5 gap-y-4">
           {/* Income */}
-          <div
-            className="min-w-0 cursor-pointer hover:opacity-70 transition-opacity"
+          <button
+            type="button"
+            className="min-w-0 text-left cursor-pointer hover:opacity-70 transition-opacity"
             onClick={() => setDrillDown({
               title: t('dashboard.drillDownIncome', { month: monthLabelStr }),
               type: 'credit',
@@ -733,17 +767,25 @@ export default function DashboardPage() {
           >
             <p className="text-xs font-medium text-muted-foreground mb-1 min-h-[16px] flex items-center">{t('dashboard.monthlyIncome')}</p>
             {summaryLoading ? (
-              <Skeleton className="h-7 w-20" />
+              <Skeleton className="h-6 w-20" />
             ) : (
-              <p className="text-2xl font-bold tabular-nums text-emerald-600 truncate">
-                +{mask(formatCurrency(income, primaryCurrency, locale))}
-              </p>
+              <>
+                <p className="text-xl font-bold tabular-nums text-emerald-600">
+                  +{mask(formatCurrency(income, primaryCurrency, locale))}
+                </p>
+                {Math.abs(projectedIncome - income) >= 0.01 && (
+                  <p className="text-xs text-muted-foreground tabular-nums mt-1">
+                    {t('dashboard.projectedIncome')} {mask(formatCurrency(projectedIncome, primaryCurrency, locale))}
+                  </p>
+                )}
+              </>
             )}
-          </div>
+          </button>
 
           {/* Expenses */}
-          <div
-            className="relative min-w-0 cursor-pointer hover:opacity-70 transition-opacity before:content-[''] before:hidden sm:before:block before:absolute before:-left-2.5 before:top-1.5 before:bottom-1.5 before:w-px before:bg-border"
+          <button
+            type="button"
+            className="relative min-w-0 text-left cursor-pointer hover:opacity-70 transition-opacity before:content-[''] before:hidden sm:before:block before:absolute before:-left-2.5 before:top-1.5 before:bottom-1.5 before:w-px before:bg-border"
             onClick={() => setDrillDown({
               title: t('dashboard.drillDownExpenses', { month: monthLabelStr }),
               type: 'debit',
@@ -753,13 +795,20 @@ export default function DashboardPage() {
           >
             <p className="text-xs font-medium text-muted-foreground mb-1 min-h-[16px] flex items-center">{t('dashboard.monthlyExpenses')}</p>
             {summaryLoading ? (
-              <Skeleton className="h-7 w-20" />
+              <Skeleton className="h-6 w-20" />
             ) : (
-              <p className="text-2xl font-bold tabular-nums text-rose-500 truncate">
-                -{mask(formatCurrency(expenses, primaryCurrency, locale))}
-              </p>
+              <>
+                <p className="text-xl font-bold tabular-nums text-rose-500">
+                  -{mask(formatCurrency(expenses, primaryCurrency, locale))}
+                </p>
+                {Math.abs(projectedExpenses - expenses) >= 0.01 && (
+                  <p className="text-xs text-muted-foreground tabular-nums mt-1">
+                    {t('dashboard.projectedExpenses')} {mask(formatCurrency(projectedExpenses, primaryCurrency, locale))}
+                  </p>
+                )}
+              </>
             )}
-          </div>
+          </button>
 
           {/* Net worth */}
           <div className="relative min-w-0 before:content-[''] before:hidden sm:before:block before:absolute before:-left-2.5 before:top-1.5 before:bottom-1.5 before:w-px before:bg-border">
@@ -774,39 +823,42 @@ export default function DashboardPage() {
                     i
                   </button>
                 </TooltipTrigger>
-                <TooltipContent className="w-64">
+                <TooltipContent className="w-56">
                   <p>{t('dashboard.netWorthTooltip')}</p>
                   <div className="mt-1.5 pt-1.5 border-t border-background/20 space-y-0.5">
                     <div className="flex justify-between gap-3">
                       <span>{t('dashboard.availableBalance')}</span>
-                      <span className="shrink-0 tabular-nums whitespace-nowrap">{mask(formatCurrency(availableBalance, primaryCurrency, locale))}</span>
+                      <span>{mask(formatCurrency(nonCardAccountsBalance, primaryCurrency, locale))}</span>
                     </div>
                     {assetsValue > 0 && (
                       <div className="flex justify-between gap-3">
                         <span>{t('dashboard.assetsValue')}</span>
-                        <span className="shrink-0 tabular-nums whitespace-nowrap">{mask(formatCurrency(assetsValue, primaryCurrency, locale))}</span>
+                        <span>{mask(formatCurrency(assetsValue, primaryCurrency, locale))}</span>
                       </div>
                     )}
                     {creditCardBalance !== 0 && (
                       <div className="flex justify-between gap-3">
                         <span>{t('dashboard.creditCardBalance')}</span>
-                        <span className="shrink-0 tabular-nums whitespace-nowrap">{mask(formatCurrency(creditCardBalance, primaryCurrency, locale))}</span>
+                        <span>{mask(formatCurrency(creditCardBalance, primaryCurrency, locale))}</span>
                       </div>
                     )}
                     {hasProjectedBalance && (
                       <div className="flex justify-between gap-3">
                         <span>{t('dashboard.projectedBalance')}</span>
-                        <span className="shrink-0 tabular-nums whitespace-nowrap">{mask(formatCurrency(projectedBalance, primaryCurrency, locale))}</span>
+                        <span>{mask(formatCurrency(projectedBalance, primaryCurrency, locale))}</span>
                       </div>
                     )}
                   </div>
                 </TooltipContent>
               </Tooltip>
             </p>
-            {summaryLoading ? (
-              <Skeleton className="h-7 w-24" />
+            {/* Net worth stays neutral so the secondary row does not out-shout
+                the headline above it. It is the larger number here; colouring
+                it too pulled the eye away from available balance. */}
+            {summaryLoading || accountsUnavailable ? (
+              <Skeleton className="h-6 w-24" />
             ) : (
-              <p className={`text-2xl font-bold tabular-nums truncate ${totalBalance < 0 ? 'text-rose-500' : 'text-blue-600'}`}>
+              <p className={`text-xl font-bold tabular-nums ${totalBalance < 0 ? 'text-rose-500' : 'text-foreground'}`}>
                 {mask(formatCurrency(totalBalance, primaryCurrency, locale))}
               </p>
             )}
@@ -816,10 +868,10 @@ export default function DashboardPage() {
           <div className="relative min-w-0 before:content-[''] before:hidden sm:before:block before:absolute before:-left-2.5 before:top-1.5 before:bottom-1.5 before:w-px before:bg-border">
             <p className="text-xs font-medium text-muted-foreground mb-1 min-h-[16px] flex items-center">{t('dashboard.savingsRate')}</p>
             {summaryLoading ? (
-              <Skeleton className="h-7 w-16" />
+              <Skeleton className="h-6 w-16" />
             ) : (
               <>
-                <p className={`text-2xl font-bold tabular-nums truncate ${savingsRateColor}`}>
+                <p className={`text-xl font-bold tabular-nums ${savingsRateColor}`}>
                   {savingsRateDisplay}
                 </p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">{t('dashboard.savingsRateCaption')}</p>
@@ -839,19 +891,22 @@ export default function DashboardPage() {
       {/* Uncategorized banner */}
       {!summaryLoading && (
         uncategorizedCount > 0 ? (
-          <div
-            className="flex items-center justify-between gap-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg px-4 py-2.5 mb-5 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors"
+          <button
+            type="button"
+            className="w-full flex items-center justify-between gap-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg px-4 py-2.5 mb-5 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors"
             onClick={() => setDrillDown({
               title: t('dashboard.drillDownUncategorized'),
               uncategorized: true,
             })}
           >
             <div className="flex items-center gap-2.5 min-w-0">
-              <span className={`shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white ${
-                uncategorizedCount >= 20 ? 'bg-amber-500' : 'bg-amber-400'
-              }`}>
-                {uncategorizedCount}
-              </span>
+              {/* An icon, not the count: the sentence beside it already states
+                  the number, and a fixed 24px circle clipped it from four
+                  digits on. Severity still reads through the tint. */}
+              <AlertCircle
+                size={16}
+                className={`shrink-0 ${uncategorizedCount >= 20 ? 'text-amber-600 dark:text-amber-400' : 'text-amber-500 dark:text-amber-500'}`}
+              />
               <span className="text-sm text-amber-900 dark:text-amber-200 truncate">
                 {t('dashboard.uncategorizedCta', { count: uncategorizedCount })}
                 {uncategorizedAmount > 0 && (
@@ -862,7 +917,7 @@ export default function DashboardPage() {
             <span className="shrink-0 text-sm font-semibold text-amber-600 dark:text-amber-400 hover:underline">
               {t('dashboard.categorizeNow')} &rarr;
             </span>
-          </div>
+          </button>
         ) : (
           <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 rounded-lg px-4 py-2.5 mb-5">
             <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
