@@ -408,6 +408,8 @@ export interface RuleDialogInitialData {
   name?: string
   conditions?: RuleConditionNode[]
   actions?: RuleAction[]
+  applyToExisting?: boolean
+  overwriteExistingCategories?: boolean
 }
 
 export function RuleDialog({
@@ -441,8 +443,10 @@ export function RuleDialog({
   )
   const [priority, setPriority] = useState(String(rule?.priority ?? 0))
   const [isActive, setIsActive] = useState(rule?.is_active ?? true)
-  const [applyToExisting, setApplyToExisting] = useState(!rule)
-  const [overwriteExistingCategories, setOverwriteExistingCategories] = useState(false)
+  const [applyToExisting, setApplyToExisting] = useState(initialData?.applyToExisting ?? !rule)
+  const [overwriteExistingCategories, setOverwriteExistingCategories] = useState(
+    initialData?.overwriteExistingCategories ?? false
+  )
   const [previewOpen, setPreviewOpen] = useState(false)
 
   function updateCondition(i: number, field: keyof RuleCondition, val: string | number) {
