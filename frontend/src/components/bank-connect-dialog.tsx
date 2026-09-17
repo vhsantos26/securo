@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useEffectEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { PluggyConnect } from 'react-pluggy-connect'
@@ -41,6 +41,11 @@ export function BankConnectDialog({
   // Only prompt for asset-sync when the provider actually imports holdings.
   const needsInitialOptions = !reconnectConnectionId && supportsAssetSync
 
+  const onTokenError = useEffectEvent(() => {
+    toast.error(t('accounts.connectError'))
+    onClose()
+  })
+
   useEffect(() => {
     if (!open) {
       setConnectToken(null)
@@ -64,8 +69,7 @@ export function BankConnectDialog({
         }
       } catch {
         if (!cancelled) {
-          toast.error(t('accounts.connectError'))
-          onClose()
+          onTokenError()
         }
       }
     }
