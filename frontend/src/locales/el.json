@@ -149,7 +149,9 @@
     "groupAdmin": "Διαχείριση",
     "groupAgents": "AI",
     "agents": "Βοηθοί",
-    "aiAgents": "Βοηθοί AI"
+    "aiAgents": "Βοηθοί AI",
+    "collapseSidebar": "Σύμπτυξη πλευρικής γραμμής",
+    "expandSidebar": "Ανάπτυξη πλευρικής γραμμής"
   },
   "invoices": {
     "title": "Τιμολόγια",

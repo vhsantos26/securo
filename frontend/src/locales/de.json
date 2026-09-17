@@ -149,7 +149,9 @@
     "groupAdmin": "Administration",
     "groupAgents": "KI",
     "agents": "Agenten",
-    "aiAgents": "KI-Agenten"
+    "aiAgents": "KI-Agenten",
+    "collapseSidebar": "Seitenleiste einklappen",
+    "expandSidebar": "Seitenleiste ausklappen"
   },
   "invoices": {
     "title": "Invoices",

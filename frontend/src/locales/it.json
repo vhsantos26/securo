@@ -149,7 +149,9 @@
     "groupAdmin": "Amministrazione",
     "groupAgents": "IA",
     "agents": "Agenti",
-    "aiAgents": "Agenti IA"
+    "aiAgents": "Agenti IA",
+    "collapseSidebar": "Riduci barra laterale",
+    "expandSidebar": "Espandi barra laterale"
   },
   "invoices": {
     "title": "Invoices",
