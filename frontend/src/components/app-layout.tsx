@@ -327,7 +327,7 @@ export function AppLayout() {
         <aside
           data-collapsed={desktopSidebarCollapsed}
           className={cn(
-            'fixed inset-y-0 left-0 z-50 w-60 bg-sidebar border-r border-sidebar-border flex flex-col transform transition-[transform,width] duration-200 lg:translate-x-0 shrink-0',
+            'fixed inset-y-0 left-0 z-50 w-60 bg-sidebar border-r border-sidebar-border flex flex-col transform transition-[transform,width] duration-300 ease-in-out motion-reduce:transition-none lg:translate-x-0 shrink-0',
             sidebarOpen ? 'translate-x-0' : '-translate-x-full',
             desktopSidebarCollapsed ? 'lg:w-16' : 'lg:w-60',
           )}
@@ -572,7 +572,7 @@ export function AppLayout() {
               primary identity, the user email + role as the secondary
               line, and combines workspace switching with all the
               account actions that used to live in a separate dropdown. */}
-          <div className={cn('px-3 pt-1', desktopSidebarCollapsed && 'lg:hidden')}>
+          <div className={cn('px-3 pt-1', desktopSidebarCollapsed && 'lg:px-2')}>
             <WorkspaceSwitcher
               onChangePassword={() => setChangePasswordOpen(true)}
               onTwoFactor={() => setTwoFactorOpen(true)}
@@ -581,6 +581,7 @@ export function AppLayout() {
               onBackup={() => setBackupOpen(true)}
               onUpdateAvailable={() => setUpdateDialogOpen(true)}
               agentsEnabled={agentsEnabled}
+              collapsed={desktopSidebarCollapsed}
             />
           </div>
 
@@ -599,7 +600,7 @@ export function AppLayout() {
 
         {/* Main content */}
         <main className={cn(
-          'flex-1 min-h-screen overflow-x-hidden transition-[margin] duration-200',
+          'flex-1 min-h-screen overflow-x-hidden transition-[margin] duration-300 ease-in-out motion-reduce:transition-none',
           desktopSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-60',
         )}>
           <div className="p-6 max-w-7xl mx-auto">
