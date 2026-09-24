@@ -5,6 +5,8 @@ import { useDateLocale } from '@/hooks/use-display-locale'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { auth as authApi, currencies as currenciesApi, fiscal as fiscalApi, workspaces as workspacesApi } from '@/lib/api'
+import { useTimezones } from '@/hooks/use-timezone'
+import { TimezoneSelect } from '@/components/timezone-select'
 import { useAuth } from '@/contexts/auth-context'
 import { useWorkspace } from '@/contexts/workspace-context'
 import { useLocalAuthEnabled } from '@/hooks/use-local-auth'
@@ -88,6 +90,7 @@ export default function WorkspaceSettingsPage() {
   const [editCurrency, setEditCurrency] = useState('')
   const [editLocale, setEditLocale] = useState('')
   const [editJurisdiction, setEditJurisdiction] = useState('')
+  const [editTimezone, setEditTimezone] = useState('')
   const [editIcon, setEditIcon] = useState(DEFAULT_WORKSPACE_ICON)
   const [editColor, setEditColor] = useState(DEFAULT_WORKSPACE_COLOR)
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -99,7 +102,7 @@ export default function WorkspaceSettingsPage() {
   const [pluggyClientId, setPluggyClientId] = useState('')
   const [pluggyClientSecret, setPluggyClientSecret] = useState('')
 
-  const formKey = JSON.stringify([current?.id, current?.name, current?.default_currency, current?.locale, current?.tax_jurisdiction, current?.icon, current?.color])
+  const formKey = JSON.stringify([current?.id, current?.name, current?.default_currency, current?.locale, current?.tax_jurisdiction, current?.timezone, current?.icon, current?.color])
   const [previousFormKey, setPreviousFormKey] = useState<string | null>(null)
   if (formKey !== previousFormKey) {
     setPreviousFormKey(formKey)
@@ -108,6 +111,7 @@ export default function WorkspaceSettingsPage() {
       setEditCurrency(current.default_currency)
       setEditLocale(current.locale ?? '')
       setEditJurisdiction(current.tax_jurisdiction ?? '')
+      setEditTimezone(current.timezone ?? '')
       setEditIcon(current.icon ?? DEFAULT_WORKSPACE_ICON)
       setEditColor(current.color ?? DEFAULT_WORKSPACE_COLOR)
     }
@@ -132,6 +136,10 @@ export default function WorkspaceSettingsPage() {
     queryFn: currenciesApi.list,
     staleTime: Infinity,
   })
+
+  // Every workspace can keep its own calendar; the default is what the
+  // application runs on when a workspace has none.
+  const { data: timezoneOptions } = useTimezones()
 
   const integrationsQuery = useQuery({
     queryKey: ['workspace-integrations', current?.id],
@@ -200,6 +208,7 @@ export default function WorkspaceSettingsPage() {
         default_currency: editCurrency,
         locale: editLocale || (null as unknown as string),
         tax_jurisdiction: editJurisdiction || null,
+        timezone: editTimezone || null,
         icon: editIcon,
         color: editColor,
       })
@@ -394,14 +403,14 @@ export default function WorkspaceSettingsPage() {
               <>
                 <div className="space-y-1.5">
                   <Label className="text-[13px]">
-                    {t('workspace.icon', 'Ícone')}
+                    {t('workspace.icon', 'Icon')}
                   </Label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <button
                         type="button"
                         className="h-10 w-10 rounded-lg border border-input flex items-center justify-center hover:bg-muted/40 transition-colors shrink-0"
-                        title={t('workspace.icon', 'Ícone')}
+                        title={t('workspace.icon', 'Icon')}
                       >
                         <CategoryIcon icon={editIcon} color={editColor} size="sm" />
                       </button>
@@ -413,7 +422,7 @@ export default function WorkspaceSettingsPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="ws-color" className="text-[13px]">
-                    {t('groups.color', 'Cor')}
+                    {t('groups.color', 'Color')}
                   </Label>
                   <input
                     id="ws-color"
@@ -421,7 +430,7 @@ export default function WorkspaceSettingsPage() {
                     value={editColor}
                     onChange={(e) => setEditColor(e.target.value)}
                     className="h-10 w-10 p-1 rounded-lg cursor-pointer border border-input bg-card shrink-0"
-                    title={t('groups.color', 'Cor')}
+                    title={t('groups.color', 'Color')}
                   />
                 </div>
               </>
@@ -446,7 +455,7 @@ export default function WorkspaceSettingsPage() {
           </div>
 
           {/* Region row — currency, language, and where the workspace files */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="ws-currency" className="text-[13px]">
                 {t('workspace.defaultCurrency')}
@@ -516,6 +525,23 @@ export default function WorkspaceSettingsPage() {
                   'workspace.taxJurisdictionHint',
                   'Decides which fiscal documents this workspace is offered. Separate from the interface language.',
                 )}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ws-timezone" className="text-[13px]">
+                {t('workspace.timezone')}
+              </Label>
+              <TimezoneSelect
+                id="ws-timezone"
+                className="h-10 rounded-lg w-full"
+                value={editTimezone}
+                onChange={setEditTimezone}
+                options={timezoneOptions?.available ?? (editTimezone ? [editTimezone] : [])}
+                emptyOption={t('workspace.timezoneDefault', { zone: timezoneOptions?.default ?? 'UTC' })}
+                disabled={!canManage}
+              />
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                {t('workspace.timezoneHint')}
               </p>
             </div>
           </div>
