@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react'
 import { getAccountName, sumAccountBalances } from '@/lib/account-utils'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -36,8 +36,7 @@ import { WorkspaceSwitcher } from '@/components/workspace-switcher'
 import { navItems, visibleNavItems, type NavItem } from '@/lib/nav-items'
 import {
   Menu,
-  PanelLeftClose,
-  PanelLeftOpen,
+  ChevronLeft,
   ChevronRight,
   Eye,
   EyeOff,
@@ -60,13 +59,15 @@ import { CommandPalette } from '@/components/command-palette'
 import { useCommandPaletteHotkey } from '@/hooks/use-command-palette-hotkey'
 import { GlobalChatPanel } from '@/components/global-chat-panel'
 import { useFeatureFlags } from '@/hooks/use-feature-flags'
-import { Bot, Search, Sparkles } from 'lucide-react'
+import { Bot, Plus, Search, Sparkles } from 'lucide-react'
 import { setThemeBasedOnSystem } from '@/lib/theme-utils'
 import { useLocalAuthEnabled } from '@/hooks/use-local-auth'
 import { formatCurrency } from '@/lib/format'
 import { creditCardCycleBoundaries } from '@/lib/credit-card-cycle'
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'securo.sidebar.collapsed'
+
+const QuickAddTransaction = lazy(() => import('@/components/quick-add-transaction'))
 
 /** Placeholder rows shown while the workspace's module list is in flight. */
 function NavSkeleton() {
@@ -98,6 +99,7 @@ export function AppLayout() {
   const { theme, setTheme, resolvedTheme } = useTheme()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(
     () => localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true',
   )
@@ -245,7 +247,7 @@ export function AppLayout() {
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           className="text-sidebar-muted hover:text-sidebar-foreground transition-colors"
-          aria-label="Toggle menu"
+          aria-label={t('app.toggleMenu')}
         >
           <Menu size={20} />
         </button>
@@ -327,7 +329,7 @@ export function AppLayout() {
         <aside
           data-collapsed={desktopSidebarCollapsed}
           className={cn(
-            'fixed inset-y-0 left-0 z-50 w-60 bg-sidebar border-r border-sidebar-border flex flex-col transform transition-[transform,width] duration-300 ease-in-out motion-reduce:transition-none lg:translate-x-0 shrink-0',
+            'group/sidebar fixed inset-y-0 left-0 z-50 w-60 bg-sidebar border-r border-sidebar-border flex flex-col transform transition-[transform,width] duration-300 ease-in-out motion-reduce:transition-none lg:translate-x-0 shrink-0',
             sidebarOpen ? 'translate-x-0' : '-translate-x-full',
             desktopSidebarCollapsed ? 'lg:w-16' : 'lg:w-60',
           )}
@@ -335,9 +337,13 @@ export function AppLayout() {
           {/* Logo — clickable link to the dashboard. Replaces the
               dedicated 'Painel' nav item so the sidebar stays focused
               on the main destinations. */}
+          {/* Collapsed on desktop, the header becomes a column: logo on
+              top, then the same privacy / chat / theme buttons stacked,
+              so nothing the expanded header offers goes missing in the
+              rail. */}
           <div className={cn(
             'flex h-16 min-h-16 items-center justify-between px-5 border-b border-sidebar-border shrink-0',
-            desktopSidebarCollapsed && 'lg:px-2',
+            desktopSidebarCollapsed && 'lg:h-auto lg:min-h-0 lg:flex-col lg:justify-center lg:gap-2 lg:px-0 lg:py-3',
           )}>
             <Link
               to="/"
@@ -354,12 +360,15 @@ export function AppLayout() {
                 {t('app.name')}
               </span>
             </Link>
-            <div className="flex items-center gap-0.5">
+            <div className={cn(
+              'flex items-center gap-0.5',
+              desktopSidebarCollapsed && 'lg:flex-col lg:gap-1',
+            )}>
               <button
                 onClick={togglePrivacyMode}
                 className={cn(
                   'text-sidebar-muted hover:text-sidebar-foreground transition-colors p-1 rounded-md hover:bg-sidebar-accent',
-                  desktopSidebarCollapsed && 'lg:hidden',
+                  desktopSidebarCollapsed && 'lg:flex lg:h-9 lg:w-9 lg:items-center lg:justify-center lg:p-0 lg:[&>svg]:h-[18px] lg:[&>svg]:w-[18px]',
                 )}
                 title={privacyMode ? t('privacy.show') : t('privacy.hide')}
                 aria-label={privacyMode ? t('privacy.show') : t('privacy.hide')}
@@ -374,7 +383,7 @@ export function AppLayout() {
                   onClick={() => setChatOpen(true)}
                   className={cn(
                     'text-sidebar-muted hover:text-sidebar-foreground transition-colors p-1 rounded-md hover:bg-sidebar-accent',
-                    desktopSidebarCollapsed && 'lg:hidden',
+                    desktopSidebarCollapsed && 'lg:flex lg:h-9 lg:w-9 lg:items-center lg:justify-center lg:p-0 lg:[&>svg]:h-[18px] lg:[&>svg]:w-[18px]',
                   )}
                   title={`${t('agents.globalChat.title', 'Chat')} (${isMac ? '⌘J' : 'Ctrl+J'})`}
                   aria-label={t('agents.globalChat.openHint', 'Open chat (⌘J)')}
@@ -386,7 +395,7 @@ export function AppLayout() {
                 onClick={toggleTheme}
                 className={cn(
                   'text-sidebar-muted hover:text-sidebar-foreground transition-colors p-1 rounded-md hover:bg-sidebar-accent',
-                  desktopSidebarCollapsed && 'lg:hidden',
+                  desktopSidebarCollapsed && 'lg:flex lg:h-9 lg:w-9 lg:items-center lg:justify-center lg:p-0 lg:[&>svg]:h-[18px] lg:[&>svg]:w-[18px]',
                 )}
                 title={
                   isDark ? t('settings.themeLight') : t('settings.themeDark')
@@ -397,18 +406,23 @@ export function AppLayout() {
               >
                 {isDark ? <Sun size={16} /> : <Moon size={16} />}
               </button>
-              <button
-                type="button"
-                onClick={toggleDesktopSidebar}
-                className="hidden lg:flex text-sidebar-muted hover:text-sidebar-foreground transition-colors p-1 rounded-md hover:bg-sidebar-accent"
-                title={desktopSidebarCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
-                aria-label={desktopSidebarCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
-                aria-expanded={!desktopSidebarCollapsed}
-              >
-                {desktopSidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-              </button>
             </div>
           </div>
+
+          {/* The collapse handle sits on the sidebar's edge, halfway out,
+              vertically centred in the viewport: the border is the thing
+              that moves, so that is where the control lives. Shown on
+              hover and on keyboard focus so it never crowds the header. */}
+          <button
+            type="button"
+            onClick={toggleDesktopSidebar}
+            className="hidden lg:flex absolute top-1/2 -right-3 -translate-y-1/2 h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/sidebar:opacity-100"
+            title={desktopSidebarCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
+            aria-label={desktopSidebarCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
+            aria-expanded={!desktopSidebarCollapsed}
+          >
+            {desktopSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+          </button>
 
           {/* Command palette trigger */}
           <div className={cn('px-3 pt-3', desktopSidebarCollapsed && 'lg:px-2')}>
@@ -433,7 +447,7 @@ export function AppLayout() {
 
           <div className="flex-1 min-h-0 overflow-y-auto">
           {/* Nav */}
-          <nav className={cn('flex flex-col gap-0.5 px-3 pt-1 pb-3', desktopSidebarCollapsed && 'lg:px-2')} data-tour="sidebar">
+          <nav className={cn('flex flex-col gap-0.5 px-3 pt-1 pb-3', desktopSidebarCollapsed && 'lg:items-center lg:gap-1 lg:px-0 lg:pt-3')} data-tour="sidebar">
             {/* Which modules this workspace shows is resolved server-side,
                 so until the workspace list lands there is no honest answer
                 — a placeholder beats both an empty sidebar and a guess. */}
@@ -462,7 +476,8 @@ export function AppLayout() {
                   ? location.pathname === '/'
                   : location.pathname.startsWith(item.path)
               const Icon = item.icon
-              return (
+              const showQuickAdd = item.key === 'transactions' && canWrite
+              const link = (
                 <Link
                   key={item.key}
                   to={item.path}
@@ -475,7 +490,7 @@ export function AppLayout() {
                     isActive
                       ? 'bg-primary/[0.08] text-primary border-l-[3px] border-primary pl-[9px]'
                       : 'text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground',
-                    desktopSidebarCollapsed && 'lg:justify-center lg:px-0',
+                    desktopSidebarCollapsed && 'lg:h-10 lg:w-10 lg:justify-center lg:border-l-0 lg:px-0 lg:pl-0',
                   )}
                 >
                   <Icon
@@ -483,10 +498,32 @@ export function AppLayout() {
                     className={cn(
                       'shrink-0',
                       isActive ? 'text-primary' : 'text-sidebar-muted',
+                      desktopSidebarCollapsed && 'lg:h-5 lg:w-5',
                     )}
                   />
                   <span className={cn(desktopSidebarCollapsed && 'lg:hidden')}>{t(`nav.${item.key}`)}</span>
                 </Link>
+              )
+              if (!showQuickAdd) return link
+              return (
+                <div key={item.key} className="relative flex items-center">
+                  <div className="min-w-0 flex-1">{link}</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSidebarOpen(false)
+                      setQuickAddOpen(true)
+                    }}
+                    title={t('transactions.addManual')}
+                    aria-label={t('transactions.addManual')}
+                    className={cn(
+                      'absolute right-2 flex h-6 w-6 items-center justify-center rounded-md border border-sidebar-border bg-sidebar text-sidebar-muted transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground',
+                      desktopSidebarCollapsed && 'lg:hidden',
+                    )}
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
               )
             })}
           </nav>
@@ -630,6 +667,11 @@ export function AppLayout() {
         localAuthEnabled={localAuthEnabled}
       />
       <BackupDialog open={backupOpen} onClose={() => setBackupOpen(false)} />
+      {quickAddOpen && (
+        <Suspense fallback={null}>
+          <QuickAddTransaction open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
+        </Suspense>
+      )}
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       {/* Slide-over global chat — opened from the sidebar pill or via
           ⌘J. The previous floating bottom-right button was removed
