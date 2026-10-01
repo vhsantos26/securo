@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { getAccountLabel, getAccountName, sumAccountBalances } from '@/lib/account-utils'
+import { getAccountLabel, getAccountName, sortAccountsByAbsoluteBalance, sumAccountBalances } from '@/lib/account-utils'
 import { currentMonth, shiftMonth, monthLastDay, monthLabel, monthRange } from '@/lib/month-utils'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
@@ -405,7 +405,11 @@ export default function DashboardPage() {
     return scoped.filter((a) => a.type === 'checking' || a.type === 'savings')
   }, [accountsList, activeAccountIds])
   const availableBalance = sumAccountBalances(availableBalanceAccounts)
-  const nonZeroBalanceAccounts = availableBalanceAccounts.filter(
+  const sortedAvailableBalanceAccounts = useMemo(
+    () => sortAccountsByAbsoluteBalance(availableBalanceAccounts, (a) => a.balance_primary ?? a.current_balance),
+    [availableBalanceAccounts],
+  )
+  const nonZeroBalanceAccounts = sortedAvailableBalanceAccounts.filter(
     (a) => Math.abs(Number(a.balance_primary ?? a.current_balance)) >= 0.01,
   )
   const zeroBalanceAccounts = availableBalanceAccounts.filter(
@@ -858,7 +862,7 @@ export default function DashboardPage() {
             {summaryLoading || accountsUnavailable ? (
               <Skeleton className="h-6 w-24" />
             ) : (
-              <p className={`text-xl font-bold tabular-nums ${totalBalance < 0 ? 'text-rose-500' : 'text-foreground'}`}>
+              <p className={`text-lg sm:text-xl font-bold tabular-nums ${totalBalance < 0 ? 'text-rose-500' : 'text-foreground'}`}>
                 {mask(formatCurrency(totalBalance, primaryCurrency, locale))}
               </p>
             )}

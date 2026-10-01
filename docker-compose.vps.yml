@@ -7,9 +7,17 @@
 #
 # Keep this file paired with docker-compose.prod.yml. It deliberately contains
 # no secrets: production values remain in /opt/securo/.env on the VPS.
+#
+# Fork-wide behaviour that upstream ships off by default lives here, so a sync
+# cannot silently switch it back. BrasilAPI lookup names the bank behind each
+# account of a banking-group Pluggy connection (e.g. XP bank vs brokerage).
+x-fork-env: &fork-env
+  BRASILAPI_INSTITUTION_LOOKUP_ENABLED: "true"
+
 services:
   backend:
     image: securo-vps-backend:local
+    environment: *fork-env
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -24,6 +32,7 @@ services:
   # the locally-built backend image too, so a sync cannot execute older code.
   celery-worker:
     image: securo-vps-backend:local
+    environment: *fork-env
 
   celery-beat:
     image: securo-vps-backend:local
