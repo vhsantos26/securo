@@ -7,6 +7,7 @@ import { useQuery, useQueries } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/auth-context'
 import { useCollectionFilter } from '@/contexts/collection-filter-context'
 import { useWorkspace } from '@/contexts/workspace-context'
+import { useSidebarState } from '@/contexts/sidebar-state-context'
 import { CollectionSelector } from '@/components/collection-selector'
 import { auth as authApi, admin as adminApi } from '@/lib/api'
 import { resolveSupportedLang } from '@/lib/i18n'
@@ -65,8 +66,6 @@ import { useLocalAuthEnabled } from '@/hooks/use-local-auth'
 import { formatCurrency } from '@/lib/format'
 import { creditCardCycleBoundaries } from '@/lib/credit-card-cycle'
 
-const SIDEBAR_COLLAPSED_STORAGE_KEY = 'securo.sidebar.collapsed'
-
 const QuickAddTransaction = lazy(() => import('@/components/quick-add-transaction'))
 
 /** Placeholder rows shown while the workspace's module list is in flight. */
@@ -100,9 +99,7 @@ export function AppLayout() {
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
-  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(
-    () => localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true',
-  )
+  const { collapsed: desktopSidebarCollapsed, toggleCollapsed: toggleDesktopSidebar } = useSidebarState()
   const [accountsExpanded, setAccountsExpanded] = useState(true)
   const [accountsShowAll, setAccountsShowAll] = useState(false)
   const { privacyMode, togglePrivacyMode, mask } = usePrivacyMode()
@@ -187,13 +184,6 @@ export function AppLayout() {
     : typeof window !== 'undefined' &&
       window.matchMedia?.('(prefers-color-scheme: dark)').matches
   const toggleTheme = () => setTheme(isDark ? 'light' : 'dark')
-  const toggleDesktopSidebar = () => {
-    setDesktopSidebarCollapsed((collapsed) => {
-      const next = !collapsed
-      localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(next))
-      return next
-    })
-  }
 
   const { data: accountsList } = useQuery({
     queryKey: ['accounts'],
@@ -228,14 +218,23 @@ export function AppLayout() {
   )
   const sidebarAccounts = useMemo(
     () => visibleAccounts
-      .map((account) => ({
-        account,
-        balance: account.shared_balance_group
-          ? sharedCreditCycleBalances.get(account.id) ?? Number(account.current_balance)
-          : Number(account.current_balance),
-      }))
+      .map((account) => {
+        // A shared credit line reports the whole line on every card, so the
+        // sidebar shows each card's own open cycle instead (in its currency).
+        const cycleBalance = account.shared_balance_group
+          ? sharedCreditCycleBalances.get(account.id)
+          : null
+        if (cycleBalance != null) {
+          return { account, balance: cycleBalance, currency: account.currency }
+        }
+        return {
+          account,
+          balance: Number(account.balance_primary ?? account.current_balance) || 0,
+          currency: account.balance_primary != null ? userCurrency : account.currency,
+        }
+      })
       .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance)),
-    [sharedCreditCycleBalances, visibleAccounts],
+    [sharedCreditCycleBalances, userCurrency, visibleAccounts],
   )
   const totalBalance = sumAccountBalances(visibleAccounts)
   const versionA11yLabel = t('app.versionAriaLabel', { version: APP_VERSION })
@@ -555,7 +554,7 @@ export function AppLayout() {
               </button>
               {accountsExpanded && (
                 <div className="mt-1 space-y-0.5">
-                  {sidebarAccounts.slice(0, accountsShowAll ? visibleAccounts.length : 3).map(({ account: acc, balance }) => {
+                  {sidebarAccounts.slice(0, accountsShowAll ? visibleAccounts.length : 3).map(({ account: acc, balance, currency: balanceCurrency }) => {
                     const typeKey = acc.type.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase()).replace(/^./, c => c.toUpperCase())
 
                     return (
@@ -575,7 +574,7 @@ export function AppLayout() {
                         </div>
                         <div className="text-right shrink-0 ml-2">
                           <span className={`block tabular-nums font-medium text-xs ${balance < 0 ? 'text-rose-400' : 'text-sidebar-foreground'}`}>
-                            {mask(formatCurrency(balance, acc.currency, locale))}
+                            {mask(formatCurrency(balance, balanceCurrency, locale))}
                           </span>
                         </div>
                       </Link>
