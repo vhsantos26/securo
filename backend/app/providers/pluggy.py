@@ -78,9 +78,17 @@ async def _lookup_bank_info(compe: str) -> Optional[dict]:
     """Best-effort ``{"name", "logo_url"}`` for a COMPE code via BrasilAPI.
 
     Cached in Redis since a bank's registered name/logo effectively never
-    change. A lookup failure must never break sync: the account falls back to
-    the connection's institution fields.
+    change. A lookup failure (network, cache, anything) must never break
+    sync — it just means the affected accounts fall back to the connection's
+    own institution fields, same as any Pluggy connection without this hint.
+
+    Gated by ``brasilapi_institution_lookup_enabled``: this is the only place
+    a COMPE code leaves the server, so deploys must opt in before any call
+    to BrasilAPI is made.
     """
+    if not get_settings().brasilapi_institution_lookup_enabled:
+        return None
+
     from app.core.redis import get_redis
 
     cache_key = f"pluggy:bank_info:{compe}"
@@ -98,6 +106,9 @@ async def _lookup_bank_info(compe: str) -> Optional[dict]:
             resp = await client.get(f"{BRASIL_API_BANKS_URL}/{int(compe)}")
             resp.raise_for_status()
             payload = resp.json()
+            # `name` (e.g. "BCO XP S.A.") is short, matching the style Pluggy
+            # itself uses for account names — `fullName` is the full legal
+            # razão social and too long for an institution label.
             name = payload.get("name") or None
             logo_url = payload.get("logo_url") or None
             info = {"name": name, "logo_url": logo_url} if name else None
@@ -123,9 +134,18 @@ async def _annotate_institutions(
     """Tell apart same-subtype accounts that belong to different legal
     institutions under one Pluggy connection.
 
-    Only same-type accounts with different COMPE codes are ambiguous. Those
-    accounts get a stable institution id, name and logo that the shared
-    ``Institution`` model persists on the next sync.
+    Pluggy is normally one institution per connection, but a banking group
+    with a brokerage arm (e.g. XP) reports both the bank's checking account
+    and the brokerage's settlement account as BANK/CHECKING_ACCOUNT — same
+    `type`, no field distinguishes them except the COMPE code embedded in
+    `bankData.transferNumber`. When every account of a given `type` in this
+    connection shares one COMPE code (the common case: one checking + one
+    savings, same bank), nothing is ambiguous and no account is touched.
+    Only when a `type` collides across more than one COMPE code do we
+    resolve and set the institution_* hint fields — which `_resolve_institution`
+    (connection_service.py) turns into an `Institution` row, same mechanism
+    SimpleFIN already uses for its own multi-institution connections
+    (issue #345).
     """
     codes_by_external_id: dict[str, str] = {}
     codes_by_type: dict[str, set[str]] = {}
@@ -144,12 +164,13 @@ async def _annotate_institutions(
         if acc.type not in ambiguous_types:
             continue
         code = codes_by_external_id.get(acc.external_id)
-        if code:
-            info = await _lookup_bank_info(code)
-            if info:
-                acc.institution_external_id = code
-                acc.institution_name = info["name"]
-                acc.institution_logo_url = info["logo_url"]
+        if not code:
+            continue
+        info = await _lookup_bank_info(code)
+        if info:
+            acc.institution_external_id = code
+            acc.institution_name = info["name"]
+            acc.institution_logo_url = info["logo_url"]
 
 
 def _resolve_connector_logo(connector: dict, accounts: list[dict]) -> Optional[str]:
@@ -527,6 +548,7 @@ class PluggyProvider(BankProvider):
         account_list = []
         for acc in raw_accounts:
             account_list.append(_build_account_data(acc, self._map_account_type))
+        await _annotate_institutions(raw_accounts, account_list)
 
         return ConnectionData(
             external_id=item_id,

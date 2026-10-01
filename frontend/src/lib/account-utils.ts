@@ -1,15 +1,16 @@
+import type { Account } from '@/types'
+
 export function getAccountName(account: { name: string; display_name?: string | null }): string {
   return account.display_name ?? account.name
 }
 
 /**
- * Sum accounts' balances in the primary currency, counting each
- * `shared_balance_group` only once. Some providers expose several accounts
- * backed by one consolidated balance (e.g. two cards on the same credit
- * line) — summing their raw balances individually double-counts that debt.
+ * Total of the accounts' primary-currency balances. Cards on one shared credit
+ * line each report the whole line's balance, so each `shared_balance_group`
+ * counts once, the same way the backend totals it.
  */
 export function sumAccountBalances(
-  accounts: readonly { balance_primary: number | null; current_balance: number; shared_balance_group?: string | null }[],
+  accounts: readonly Pick<Account, 'balance_primary' | 'current_balance' | 'shared_balance_group'>[],
 ): number {
   const seenGroups = new Set<string>()
   return accounts.reduce((sum, a) => {
@@ -34,6 +35,25 @@ export function sortAccountsByDisplayName<
       sensitivity: 'base',
     }),
   )
+}
+
+/**
+ * Return a presentation-only copy with the largest account balances first.
+ * Debt accounts participate by magnitude, matching the balance list in the
+ * sidebar, while invalid/missing balances sort as zero.
+ * Pass a selector to compare multi-currency accounts in a common currency.
+ */
+export function sortAccountsByAbsoluteBalance<
+  T extends { current_balance?: number | string | null },
+>(
+  accounts: readonly T[],
+  getBalance: (account: T) => number | string | null | undefined = (account) => account.current_balance,
+): T[] {
+  return [...accounts].sort((left, right) => {
+    const leftBalance = Number(getBalance(left)) || 0
+    const rightBalance = Number(getBalance(right)) || 0
+    return Math.abs(rightBalance) - Math.abs(leftBalance)
+  })
 }
 
 /**
