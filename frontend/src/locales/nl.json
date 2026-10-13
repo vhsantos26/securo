@@ -1755,7 +1755,8 @@
       "invalid_date": "Ongeldige datumformaat",
       "no_amount": "Geen in- of uitstroombedrag",
       "invalid_amount": "Ongeldig bedragformaat"
-    }
+    },
+    "selectAll": "Alles selecteren"
   },
   "assetImport": {
     "title": "Investeringsorders importeren",
@@ -1992,6 +1993,9 @@
     "inflowOutflow": "Instroom versus uitstroom",
     "startingBalance": "Beginsaldo",
     "endingBalance": "Geprojecteerd saldo",
+    "runwayNegativeOn": "Het saldo wordt negatief op {{date}}",
+    "runwayAlreadyNegative": "Al negatief",
+    "lowestBalance": "Laagste saldo",
     "projectedIncome": "Geprojecteerd inkomen",
     "projectedExpenses": "Geprojecteerde uitgaven",
     "incomeExpenses": "Inkomsten versus uitgaven",
@@ -2196,6 +2200,8 @@
     "remove": "Verwijderen"
   },
   "splitGroups": {
+    "searchPlaceholder": "Groepen zoeken...",
+    "clearSearch": "Zoekopdracht wissen",
     "title": "Groepen",
     "section": "Instellen",
     "add": "Groep toevoegen",
