@@ -18,6 +18,7 @@ import type {
   AccountSummary,
   Collection,
   CreditCardBill,
+  DescriptionSuggestion,
   Transaction,
   Payee,
   PayeeSummary,
@@ -581,6 +582,10 @@ export const transactions = {
     const { data } = await api.get(`/transactions/${id}`)
     return data
   },
+  descriptionSuggestions: async (q: string, limit = 8): Promise<DescriptionSuggestion[]> => {
+    const { data } = await api.get('/transactions/description-suggestions', { params: { q, limit } })
+    return data
+  },
   create: async (transaction: TransactionEditPayload): Promise<Transaction> => {
     const { data } = await api.post('/transactions', transaction)
     return data
@@ -958,8 +963,8 @@ export interface GroupSettlementPayload {
 }
 
 export const groups = {
-  list: async (includeArchived = false): Promise<Group[]> => {
-    const { data } = await api.get('/groups', { params: { include_archived: includeArchived } })
+  list: async (includeArchived = false, filters: { q?: string; status?: 'active' | 'archived' | 'all' } = {}): Promise<Group[]> => {
+    const { data } = await api.get('/groups', { params: { include_archived: includeArchived, ...filters } })
     return data
   },
   get: async (id: string): Promise<Group> => {
