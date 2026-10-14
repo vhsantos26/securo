@@ -1757,7 +1757,8 @@
       "invalid_date": "Formato de fecha no válido",
       "no_amount": "Sin importe de entrada o salida",
       "invalid_amount": "Formato de importe no válido"
-    }
+    },
+    "selectAll": "Seleccionar todo"
   },
   "assetImport": {
     "title": "Importar órdenes de inversión",
@@ -1994,6 +1995,9 @@
     "inflowOutflow": "Entrada vs. salida",
     "startingBalance": "Saldo inicial",
     "endingBalance": "Saldo proyectado",
+    "runwayNegativeOn": "El saldo queda en negativo el {{date}}",
+    "runwayAlreadyNegative": "Ya está en negativo",
+    "lowestBalance": "Saldo mínimo",
     "projectedIncome": "Ingresos proyectados",
     "projectedExpenses": "Gastos proyectados",
     "incomeExpenses": "Ingresos vs. gastos",
@@ -2198,6 +2202,8 @@
     "remove": "Quitar"
   },
   "splitGroups": {
+    "searchPlaceholder": "Buscar grupos...",
+    "clearSearch": "Limpiar búsqueda",
     "title": "Grupos",
     "section": "Configuración",
     "add": "Agregar grupo",
