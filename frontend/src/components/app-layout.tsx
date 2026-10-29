@@ -1,9 +1,15 @@
 import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react'
-import { getAccountName, sumAccountBalances } from '@/lib/account-utils'
+import {
+  getAccountName,
+  sidebarAccountBalance,
+  sidebarAccounts,
+  sortAccountsByAbsoluteBalance,
+  sumAccountsTotal,
+} from '@/lib/account-utils'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale } from '@/hooks/use-display-locale'
-import { useQuery, useQueries } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/auth-context'
 import { useCollectionFilter } from '@/contexts/collection-filter-context'
 import { useWorkspace } from '@/contexts/workspace-context'
@@ -43,6 +49,7 @@ import {
   EyeOff,
   Sun,
   Moon,
+  Monitor,
   Languages,
   KeyRound,
   Check,
@@ -62,9 +69,9 @@ import { GlobalChatPanel } from '@/components/global-chat-panel'
 import { useFeatureFlags } from '@/hooks/use-feature-flags'
 import { Bot, Plus, Search, Sparkles } from 'lucide-react'
 import { setThemeBasedOnSystem } from '@/lib/theme-utils'
+import { nextTheme, THEME_LABEL_KEY } from '@/lib/theme-cycle'
 import { useLocalAuthEnabled } from '@/hooks/use-local-auth'
 import { formatCurrency } from '@/lib/format'
-import { creditCardCycleBoundaries } from '@/lib/credit-card-cycle'
 
 const QuickAddTransaction = lazy(() => import('@/components/quick-add-transaction'))
 
@@ -178,65 +185,24 @@ export function AppLayout() {
   }, [user, updateUser])
 
   const userInitial = user?.email?.charAt(0).toUpperCase() ?? '?'
-  const resolvedThemeLocal = theme === 'system' ? undefined : theme
-  const isDark = resolvedThemeLocal
-    ? resolvedThemeLocal === 'dark'
-    : typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-color-scheme: dark)').matches
-  const toggleTheme = () => setTheme(isDark ? 'light' : 'dark')
+  // The button shows, and switches to, the next theme in the cycle.
+  const upcomingTheme = nextTheme(theme)
+  const themeButtonLabel = t(THEME_LABEL_KEY[upcomingTheme])
+  const ThemeIcon = { light: Sun, dark: Moon, system: Monitor }[upcomingTheme]
+  const toggleTheme = () => setTheme(upcomingTheme)
 
   const { data: accountsList } = useQuery({
     queryKey: ['accounts'],
     queryFn: () => accountsApi.list(),
   })
 
-  const allAccounts = useMemo(() => accountsList ?? [], [accountsList])
+  const allAccounts = sidebarAccounts(accountsList ?? [])
   // When a collection is active, the sidebar list + total reflect only its
   // accounts (issue #105). null = all accounts.
   const visibleAccounts = activeAccountIds
     ? allAccounts.filter((a) => activeAccountIds.includes(a.id))
     : allAccounts
-  const sharedCreditCards = useMemo(
-    () => allAccounts.filter((account) => account.type === 'credit_card' && account.shared_balance_group && account.statement_close_day),
-    [allAccounts],
-  )
-  const sharedCreditCycleQueries = useQueries({
-    queries: sharedCreditCards.map((account) => {
-      const cycle = creditCardCycleBoundaries(account.statement_close_day!)
-      return {
-        queryKey: ['accounts', account.id, 'summary', cycle.start, cycle.end, { unbilled_only: true }],
-        queryFn: () => accountsApi.summary(account.id, cycle.start, cycle.end, undefined, true),
-      }
-    }),
-  })
-  const sharedCreditCycleBalances = useMemo(
-    () => new Map<string, number | null>(sharedCreditCards.map((account, index) => {
-      const summary = sharedCreditCycleQueries[index]?.data
-      return [account.id, summary ? -Number(summary.projected_expenses ?? summary.monthly_expenses) : null]
-    })),
-    [sharedCreditCards, sharedCreditCycleQueries],
-  )
-  const sidebarAccounts = useMemo(
-    () => visibleAccounts
-      .map((account) => {
-        // A shared credit line reports the whole line on every card, so the
-        // sidebar shows each card's own open cycle instead (in its currency).
-        const cycleBalance = account.shared_balance_group
-          ? sharedCreditCycleBalances.get(account.id)
-          : null
-        if (cycleBalance != null) {
-          return { account, balance: cycleBalance, currency: account.currency }
-        }
-        return {
-          account,
-          balance: Number(account.balance_primary ?? account.current_balance) || 0,
-          currency: account.balance_primary != null ? userCurrency : account.currency,
-        }
-      })
-      .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance)),
-    [sharedCreditCycleBalances, userCurrency, visibleAccounts],
-  )
-  const totalBalance = sumAccountBalances(visibleAccounts)
+  const totalBalance = sumAccountsTotal(visibleAccounts)
   const versionA11yLabel = t('app.versionAriaLabel', { version: APP_VERSION })
 
   return (
@@ -280,12 +246,10 @@ export function AppLayout() {
           <button
             onClick={toggleTheme}
             className="text-sidebar-muted hover:text-sidebar-foreground transition-colors p-1"
-            title={isDark ? t('settings.themeLight') : t('settings.themeDark')}
-            aria-label={
-              isDark ? t('settings.themeLight') : t('settings.themeDark')
-            }
+            title={themeButtonLabel}
+            aria-label={themeButtonLabel}
           >
-            {isDark ? <Sun size={18} /> : <Moon size={18} />}
+            <ThemeIcon size={18} />
           </button>
           {/* AI chat — opens the global slide-over (also reachable via
               ⌘J). Sits next to the theme toggle so the icon is always
@@ -396,14 +360,10 @@ export function AppLayout() {
                   'text-sidebar-muted hover:text-sidebar-foreground transition-colors p-1 rounded-md hover:bg-sidebar-accent',
                   desktopSidebarCollapsed && 'lg:flex lg:h-9 lg:w-9 lg:items-center lg:justify-center lg:p-0 lg:[&>svg]:h-[18px] lg:[&>svg]:w-[18px]',
                 )}
-                title={
-                  isDark ? t('settings.themeLight') : t('settings.themeDark')
-                }
-                aria-label={
-                  isDark ? t('settings.themeLight') : t('settings.themeDark')
-                }
+                title={themeButtonLabel}
+                aria-label={themeButtonLabel}
               >
-                {isDark ? <Sun size={16} /> : <Moon size={16} />}
+                <ThemeIcon size={16} />
               </button>
             </div>
           </div>
@@ -554,7 +514,9 @@ export function AppLayout() {
               </button>
               {accountsExpanded && (
                 <div className="mt-1 space-y-0.5">
-                  {sidebarAccounts.slice(0, accountsShowAll ? visibleAccounts.length : 3).map(({ account: acc, balance, currency: balanceCurrency }) => {
+                  {sortAccountsByAbsoluteBalance(visibleAccounts, (a) => sidebarAccountBalance(a).amount).slice(0, accountsShowAll ? visibleAccounts.length : 3).map((acc) => {
+                    const { amount: balance, isPrimary: balanceIsPrimary } = sidebarAccountBalance(acc)
+                    const balanceCurrency = balanceIsPrimary ? userCurrency : acc.currency
                     const typeKey = acc.type.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase()).replace(/^./, c => c.toUpperCase())
 
                     return (
