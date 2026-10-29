@@ -37,6 +37,7 @@ from app.models.invoice import (
 )
 from app.models.invoice_attachment import InvoiceAttachment
 from app.models.invoice_schedule import InvoiceSchedule, InvoiceScheduleTerm
+from app.models.mortgage_payment_allocation import MortgagePaymentAllocation
 from app.models.product import Product, ProductPrice
 from app.models.reconciliation import (
     ReconciliationEvent,
@@ -93,6 +94,7 @@ __all__ = [
     "InvoiceInstallment",
     "InvoiceSchedule",
     "InvoiceScheduleTerm",
+    "MortgagePaymentAllocation",
     "Product",
     "ProductPrice",
     "ReconciliationEvent",
