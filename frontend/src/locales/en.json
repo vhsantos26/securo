@@ -1207,6 +1207,7 @@
     "fieldType": "Type",
     "fieldAccount": "Account",
     "fieldPayee": "Payee",
+    "fieldCardEnding": "Card ending",
     "fieldDate": "Date",
     "opContains": "contains",
     "opNotContains": "does not contain",

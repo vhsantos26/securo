@@ -37,7 +37,8 @@ class DuplicateRuleError(Exception):
 
 
 _ALLOWED_CONDITION_FIELDS = {
-    "description", "payee", "notes", "amount", "type", "account_id", "payee_id", "date",
+    "description", "payee", "notes", "amount", "type", "account_id", "payee_id",
+    "card_masked_number", "date",
 }
 _ALLOWED_CONDITION_OPS = {
     "contains", "not_contains", "equals", "not_equals", "starts_with",
@@ -80,6 +81,14 @@ async def _validate_rule_definition(
         op = _rule_item_value(condition, "op")
         if field not in _ALLOWED_CONDITION_FIELDS or op not in _ALLOWED_CONDITION_OPS:
             raise ValueError("Invalid rule condition")
+        if field == "card_masked_number":
+            value = _rule_item_value(condition, "value")
+            if op not in {"equals", "not_equals"}:
+                raise ValueError("Card ending conditions only support is/is not")
+            if not isinstance(value, str) or not (
+                len(value.strip()) == 4 and value.strip().isalnum()
+            ):
+                raise ValueError("Card ending must contain exactly four characters")
         if op == "regex":
             compile_rule_regex(str(_rule_item_value(condition, "value") or ""))
 

@@ -39,6 +39,7 @@ const CONDITION_FIELDS = [
   { value: 'type', label: 'rules.fieldType' },
   { value: 'account_id', label: 'rules.fieldAccount' },
   { value: 'payee_id', label: 'rules.fieldPayee' },
+  { value: 'card_masked_number', label: 'rules.fieldCardEnding' },
   { value: 'date', label: 'rules.fieldDate' },
 ] as const
 
@@ -63,7 +64,7 @@ const NUMERIC_OPS = [
 function getOpsForField(field: string) {
   if (field === 'amount' || field === 'date') return NUMERIC_OPS
   if (field === 'type') return [{ value: 'equals', label: 'rules.opIs' }]
-  if (field === 'payee_id' || field === 'account_id') return [
+  if (field === 'payee_id' || field === 'account_id' || field === 'card_masked_number') return [
     { value: 'equals', label: 'rules.opIs' },
     { value: 'not_equals', label: 'rules.opIsNot' },
   ]
@@ -183,8 +184,17 @@ function ConditionRow({
           className="col-span-2 h-8 w-full min-w-0 text-sm sm:w-0 sm:flex-1"
           value={String(condition.value)}
           onChange={(e) => onChange('value', e.target.value)}
-          placeholder={condition.field === 'amount' ? '0.00' : condition.field === 'date' ? 'YYYY-MM-DD' : t('rules.valuePlaceholder')}
+          placeholder={
+            condition.field === 'amount'
+              ? '0.00'
+              : condition.field === 'date'
+                ? 'YYYY-MM-DD'
+                : condition.field === 'card_masked_number'
+                  ? '5896'
+                  : t('rules.valuePlaceholder')
+          }
           type={condition.field === 'amount' ? 'number' : condition.field === 'date' ? 'date' : 'text'}
+          maxLength={condition.field === 'card_masked_number' ? 4 : undefined}
         />
       )}
       <button

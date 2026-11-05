@@ -1208,6 +1208,7 @@
     "fieldType": "Tipo",
     "fieldAccount": "Conta",
     "fieldPayee": "Pessoa",
+    "fieldCardEnding": "Final do cartão",
     "fieldDate": "Data",
     "opContains": "contém",
     "opNotContains": "não contém",

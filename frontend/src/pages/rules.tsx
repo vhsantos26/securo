@@ -70,6 +70,7 @@ const CONDITION_FIELDS = [
   { value: 'type', label: 'rules.fieldType' },
   { value: 'account_id', label: 'rules.fieldAccount' },
   { value: 'payee_id', label: 'rules.fieldPayee' },
+  { value: 'card_masked_number', label: 'rules.fieldCardEnding' },
   { value: 'date', label: 'rules.fieldDate' },
 ] as const
 
@@ -94,7 +95,7 @@ const NUMERIC_OPS = [
 function getOpsForField(field: string) {
   if (field === 'amount' || field === 'date') return NUMERIC_OPS
   if (field === 'type') return [{ value: 'equals', label: 'rules.opIs' }]
-  if (field === 'payee_id' || field === 'account_id') return [
+  if (field === 'payee_id' || field === 'account_id' || field === 'card_masked_number') return [
     { value: 'equals', label: 'rules.opIs' },
     { value: 'not_equals', label: 'rules.opIsNot' },
   ]

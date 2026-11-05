@@ -1207,6 +1207,7 @@
     "fieldType": "Typ",
     "fieldAccount": "Rekening",
     "fieldPayee": "Begunstigde",
+    "fieldCardEnding": "Laatste cijfers van kaart",
     "fieldDate": "Datum",
     "opContains": "bevat",
     "opNotContains": "bevat niet",
