@@ -9,8 +9,9 @@ Usage:
     uv run python scripts/backfill_transaction_card_numbers.py
     uv run python scripts/backfill_transaction_card_numbers.py --apply
 
-`--apply` is intentionally separate and only works after migration 079 has
-created ``transactions.card_masked_number``.
+`--apply` is intentionally separate and only works after migrations 079 and
+080 have created the transaction field and linked-card table. Stop the Celery
+worker while it runs, so a sync does not register the same card concurrently.
 """
 
 import argparse
@@ -22,6 +23,7 @@ from typing import cast
 from uuid import UUID
 
 from sqlalchemy import inspect, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import CursorResult
 
 # This script is called directly from ``backend/scripts``. Make the backend
@@ -30,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.database import async_session_maker, engine
 from app.models.account import Account
+from app.models.account_card import AccountCard
 from app.models.transaction import Transaction
 from app.providers.base import mask_last4
 
@@ -53,22 +56,38 @@ async def _has_target_column() -> bool:
         )
 
 
+async def _has_linked_cards_table() -> bool:
+    async with engine.connect() as connection:
+        return await connection.run_sync(
+            lambda sync_connection: "account_cards"
+            in inspect(sync_connection).get_table_names()
+        )
+
+
 async def main(apply: bool, workspace_id: UUID | None) -> int:
     has_target_column = await _has_target_column()
-    if apply and not has_target_column:
-        print("Refusing --apply: migration 079 has not been applied.")
+    has_linked_cards_table = await _has_linked_cards_table()
+    if apply and (not has_target_column or not has_linked_cards_table):
+        print("Refusing --apply: migrations 079 and 080 have not been applied.")
         return 2
 
     async with async_session_maker() as session:
-        account_query = select(Account.id, Account.name)
+        account_query = select(Account.id, Account.name, Account.type)
         if workspace_id:
             account_query = account_query.where(Account.workspace_id == workspace_id)
         account_rows = await session.execute(account_query)
-        account_names: dict[UUID, str] = {
-            account_id: account_name for account_id, account_name in account_rows.all()
-        }
+        account_names: dict[UUID, str] = {}
+        account_types: dict[UUID, str] = {}
+        for account_id, account_name, account_type in account_rows.all():
+            account_names[account_id] = account_name
+            account_types[account_id] = account_type
 
-        columns = [Transaction.id, Transaction.account_id, Transaction.raw_data]
+        columns = [
+            Transaction.id,
+            Transaction.workspace_id,
+            Transaction.account_id,
+            Transaction.raw_data,
+        ]
         if has_target_column:
             columns.append(Transaction.card_masked_number)
         query = select(*columns)
@@ -78,16 +97,24 @@ async def main(apply: bool, workspace_id: UUID | None) -> int:
 
         candidate_ids_by_tail: dict[str, list[UUID]] = defaultdict(list)
         candidates_by_account: dict[UUID, Counter[str]] = defaultdict(Counter)
+        linked_cards: set[tuple[UUID, UUID, str]] = set()
         totals = Counter(scanned=len(rows), with_card_number=0, already_backfilled=0)
 
         for row in rows:
-            transaction_id, account_id, raw_data, *existing_value = row
+            transaction_id, transaction_workspace_id, account_id, raw_data, *existing_value = row
+            current_tail = existing_value[0] if existing_value else None
             tail = _tail_from_raw_data(raw_data)
+            # Register the ending the transaction ends up with: the stored one
+            # wins over the payload, since the filter matches stored endings.
+            # Older partial runs may have written it without the linked card.
+            # Credit cards only, matching the sync path and migration 080.
+            final_tail = current_tail or tail
+            if final_tail and account_types.get(account_id) == "credit_card":
+                linked_cards.add((transaction_workspace_id, account_id, final_tail))
             if tail is None:
                 continue
             totals["with_card_number"] += 1
 
-            current_tail = existing_value[0] if existing_value else None
             if current_tail is not None:
                 totals["already_backfilled"] += 1
                 continue
@@ -123,16 +150,38 @@ async def main(apply: bool, workspace_id: UUID | None) -> int:
             return 0
 
         updated = 0
-        for tail, transaction_ids in candidate_ids_by_tail.items():
-            result = await session.execute(
-                update(Transaction)
-                .where(
-                    Transaction.id.in_(transaction_ids),
-                    Transaction.card_masked_number.is_(None),
+        if linked_cards:
+            await session.execute(
+                insert(AccountCard)
+                .values(
+                    [
+                        {
+                            "workspace_id": workspace_id,
+                            "account_id": account_id,
+                            "masked_number": masked_number,
+                        }
+                        for workspace_id, account_id, masked_number in linked_cards
+                    ]
                 )
-                .values(card_masked_number=tail)
+                .on_conflict_do_nothing(
+                    index_elements=["account_id", "masked_number"]
+                )
             )
-            updated += cast(CursorResult, result).rowcount or 0
+        # Chunk the ids: one UPDATE with thousands of bound UUIDs goes past the
+        # driver's parameter limit on a large history.
+        batch_size = 500
+        for tail, transaction_ids in candidate_ids_by_tail.items():
+            for start in range(0, len(transaction_ids), batch_size):
+                batch = transaction_ids[start:start + batch_size]
+                result = await session.execute(
+                    update(Transaction)
+                    .where(
+                        Transaction.id.in_(batch),
+                        Transaction.card_masked_number.is_(None),
+                    )
+                    .values(card_masked_number=tail)
+                )
+                updated += cast(CursorResult, result).rowcount or 0
         await session.commit()
         print(f"updated: {updated}")
         return 0
@@ -143,7 +192,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="write masked tails after migration 079; omit for a read-only preview",
+        help="write masked tails after migrations 079 and 080; omit for a read-only preview",
     )
     parser.add_argument(
         "--workspace-id",

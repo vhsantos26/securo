@@ -30,6 +30,19 @@ services:
 
   # These services run the same application package as the API. Pin them to
   # the locally-built backend image too, so a sync cannot execute older code.
+  # `migrate` matters most: the published upstream image carries a different
+  # Alembic chain and would corrupt this database.
+  # backend/tests/test_fork_guards.py fails when upstream adds a service that
+  # is missing here.
+  migrate:
+    image: securo-vps-backend:local
+
+  plugins-runner:
+    image: securo-vps-backend:local
+
+  plugins-egress:
+    image: securo-vps-backend:local
+
   celery-worker:
     image: securo-vps-backend:local
     environment: *fork-env

@@ -6,11 +6,21 @@ export interface User {
   is_verified: boolean
   is_2fa_enabled: boolean
   preferences: UserPreferences
+  /** The theme picked from the library; null is Securo's own look. */
+  theme?: string | null
+  /**
+   * An address an administrator asked to put on this account, waiting for the
+   * person whose account it is to accept it (#556). The login address stays
+   * `email` until then.
+   */
+  pending_email?: string | null
 }
 
 export interface AdminUser {
   id: string
   email: string
+  /** An address an administrator asked for and its owner has not accepted yet. */
+  pending_email?: string | null
   is_active: boolean
   is_superuser: boolean
   is_verified: boolean
@@ -19,6 +29,35 @@ export interface AdminUser {
 
 export interface AdminUserList {
   items: AdminUser[]
+  total: number
+}
+
+/** One field an administrative action touched, with its old and new value. */
+export interface AccessLogFieldChange {
+  from?: string | boolean | null
+  to?: string | boolean | null
+  /** An address change the owner has not accepted yet (#556). */
+  pending?: boolean
+  /** A value too large to keep twice in the record (preferences). */
+  changed?: boolean
+}
+
+/** One administrative action on an account, with the reason given (ADR 0042). */
+export interface AdminAccessLogEntry {
+  id: string
+  actor_email: string
+  target_email: string
+  target_user_id: string | null
+  action: string
+  /** Every field the action changed, keyed by field name (#556). */
+  changes?: Record<string, AccessLogFieldChange> | null
+  reason: string
+  ip: string | null
+  created_at: string
+}
+
+export interface AdminAccessLogList {
+  items: AdminAccessLogEntry[]
   total: number
 }
 
@@ -97,6 +136,15 @@ export interface UserPreferences {
   currency_display?: string
   display_name?: string
   onboarding_completed?: boolean
+  /** Saved portfolio-performance selections, keyed by workspace id. */
+  performance_views?: Record<string, SavedPerformanceView[]>
+}
+
+export interface SavedPerformanceView {
+  id: string
+  name: string
+  wallet_ids: string[]
+  asset_ids: string[]
 }
 
 export interface Category {
@@ -153,10 +201,29 @@ export interface BankConnection {
   status: string
   settings: ConnectionSettings | null
   last_sync_at: string | null
+  /** Why the last sync failed, until a sync succeeds. */
+  last_sync_failure?: SyncFailure | null
   created_at: string
   // Institutions this link spans (issue #345). Empty for one-institution
   // providers — institution_name covers those.
   institutions: ConnectionInstitution[]
+  /** Set when a plugin syncs this connection: it is managed through that plugin connection. */
+  plugin_connection_id?: string | null
+  plugin_id?: string | null
+  integration?: string | null
+}
+
+export type SyncFailureCode =
+  | 'psu_present_required'
+  | 'consent_expired'
+  | 'reauthorize_at_provider'
+  | 'rate_limited'
+  | 'provider_error'
+
+export interface SyncFailure {
+  code: SyncFailureCode
+  at: string
+  detail: string | null
 }
 
 export interface ConnectionSettings {
@@ -168,10 +235,14 @@ export interface ConnectionSettings {
 // Response of POST /connections/{id}/sync: the connection plus what the run
 // actually did. "rate_limited" means the provider throttled the request
 // (429): nothing was pulled and last_sync_at was left untouched (issue #736).
+// "partial" means some accounts were throttled and skipped while the others
+// were imported.
 export interface SyncResult extends BankConnection {
   merged_count: number
-  sync_outcome: 'refreshed' | 'rate_limited'
+  sync_outcome: 'refreshed' | 'partial' | 'rate_limited'
 }
+
+export type AccountType = 'checking' | 'savings' | 'credit_card' | 'loan' | 'investment' | 'wallet'
 
 export interface Account {
   id: string
@@ -198,7 +269,17 @@ export interface Account {
   loan_first_payment_date?: string | null
   loan_amortization?: LoanAmortization | null
   balance: number
+  // Provider balance as reported; reserves are a separate display-only breakdown.
   current_balance: number
+  reserved_balances?: {
+    id: string
+    external_id: string
+    name: string | null
+    currency: string
+    amount: number
+  }[]
+  // Sum of the same-currency reservations, in the account's currency.
+  reserved_total?: number
   previous_balance: number | null
   // Date of the opening-balance transaction; null when there is none.
   balance_date?: string | null
@@ -304,6 +385,9 @@ export interface Transaction {
   external_id: string | null
   description: string
   original_description: string | null
+  /** The category the bank/provider sent for this row, in its own words
+   *  (not translated by the app). Read-only; null when it has none. */
+  provider_category?: string | null
   amount: number
   currency: string
   date: string
@@ -324,6 +408,11 @@ export interface Transaction {
   amount_primary: number | null
   fx_rate_used: number | null
   fx_fallback: boolean
+  /**
+   * Whether the owner typed the conversion (ADR 0031). A derived one follows
+   * the date and the amount, so the dialog never sends it back (#483).
+   */
+  fx_typed?: boolean
   attachment_count?: number
   installment_number: number | null
   total_installments: number | null
@@ -339,9 +428,26 @@ export interface Transaction {
   // available, cycle math otherwise). Setting it forces the tx into the
   // bill whose due_date matches.
   effective_bill_date: string | null
+  // Optional period-attribution override. The bank-provided `date` remains
+  // unchanged; null restores automatic cash/accrual bucketing.
+  reporting_date_override: string | null
+  // The date the paginated list filtered and ordered this row by (#1386):
+  // the override, a manual bill date or, in accrual mode, a card's bill due
+  // date. Absent outside the list.
+  reporting_date?: string | null
   // The recurring bill this transaction fulfills, if any (issue #116).
   recurring_transaction_id?: string | null
   splits: TransactionSplit[]
+  // Settlements this credit pays back.
+  settled_by?: { id: string; group_id: string; from_member_id: string; amount: number }[]
+  // Split across several categories (#425): `category_id` is then null and
+  // each part lives in `category_lines`, adding up to `amount`.
+  has_category_lines?: boolean
+  category_lines?: TransactionCategoryLine[]
+  // Set by a list filtered by category: the part of a split row that falls
+  // in the filter, so totals built from rows match the report they came from.
+  matched_amount?: number | null
+  matched_amount_primary?: number | null
   // Shared-transaction view fields. Set per-request when the viewer
   // is a linked split member but not the owner. Render `viewer_share`
   // as the amount and treat the row as read-only — editing belongs
@@ -354,8 +460,21 @@ export interface Transaction {
   parent_owner_name?: string | null
   // Flag to exclude this transaction from reports and dashboard aggregations
   is_ignored: boolean
+  // False until the person has seen this row (issue #636): a transaction a
+  // sync or an import created starts here, and opening it or marking all as
+  // read clears it. Absent on endpoints that do not carry the flag.
+  is_read?: boolean
   // Keeps the transaction in the ledger/balance while excluding it from P&L.
   exclude_from_pnl?: boolean
+  // A marker to come back to the row later, with an optional reminder date
+  // (YYYY-MM-DD) and note; only the flagged views read them.
+  is_flagged?: boolean
+  // Whether the money has already moved (issue #15). A statement row opens as
+  // paid and a manual one as unpaid; only the user's mark changes it. No
+  // total, balance or report reads it.
+  is_paid?: boolean
+  flag_due_date?: string | null
+  flag_note?: string | null
   // Balance right after this row, filled by the server only when the list
   // was asked for it on a single non-credit-card account (#1202).
   // `running_balance_primary` is null when the account is in the primary
@@ -390,6 +509,7 @@ export interface InstallmentSeriesInput {
     fx_rate_used?: number | null
     effective_bill_date?: string | null
     splits?: TransactionSplitsInput | null
+    category_lines?: TransactionCategoryLinesInput | null
   }
   installments: number
   first_installment_status?: 'posted' | 'pending'
@@ -397,6 +517,33 @@ export interface InstallmentSeriesInput {
 }
 
 export type ShareType = 'equal' | 'exact' | 'percent'
+
+export type CategoryLineShareType = 'exact' | 'percent'
+
+export interface TransactionCategoryLine {
+  id: string
+  category_id: string
+  amount: number
+  share_type: CategoryLineShareType
+  share_pct: number | null
+  position: number
+  notes: string | null
+  category?: Category | null
+}
+
+export interface TransactionCategoryLineInput {
+  category_id: string
+  amount?: number | null
+  share_pct?: number | null
+  notes?: string | null
+}
+
+// Same semantics as `splits`: leave it out to keep the current parts, send
+// two or more lines to split, send an empty list to undo the split.
+export interface TransactionCategoryLinesInput {
+  share_type: CategoryLineShareType
+  lines: TransactionCategoryLineInput[]
+}
 
 export interface TransactionSplit {
   id: string
@@ -425,8 +572,20 @@ export interface TransactionSplitsInput {
 // TransactionSplitsInput the split section produces, not the
 // TransactionSplit[] rows the API returns, so the edit payload type reflects
 // the form's actual shape.
-export type TransactionEditPayload = Omit<Partial<Transaction>, 'splits'> & {
+// Narrows the flagged views by reminder date: past it, or within a week.
+export type FlagDue = 'overdue' | 'soon'
+
+export interface FlaggedSummary {
+  flagged: number
+  overdue: number
+  due_soon: number
+}
+
+export type TransactionEditPayload = Omit<Partial<Transaction>, 'splits' | 'category_lines'> & {
   splits?: TransactionSplitsInput | null
+  category_lines?: TransactionCategoryLinesInput
+  // Replaces the settlements this credit pays back; no payers removes them.
+  payback?: { group_id?: string; to_member_id?: string; payers: { member_id: string; amount: number }[] }
 }
 
 export type GroupKind = 'social' | 'cost_center' | 'project' | 'client' | 'other'
@@ -474,7 +633,8 @@ export interface GroupSettlement {
 export interface GroupBalanceLine {
   member_id: string
   currency: string
-  // Positive = member owes the owner. Negative = owner owes member.
+  // Relative to the viewer: positive = member owes the viewer,
+  // negative = the viewer owes the member.
   amount: number
   // FX-converted to the group's default currency for cross-currency rollups.
   amount_in_default_currency: number
@@ -518,7 +678,7 @@ export interface PayeeTaxId {
 
 export interface Payee {
   id: string
-  user_id: string
+  user_id: string | null
   name: string
   /** Legal nature, or null when unknown — the normal state for a row sync created. */
   type: 'person' | 'company' | null
@@ -601,6 +761,384 @@ export interface RuleExportItem {
   is_active: boolean
 }
 
+export interface RulePack {
+  code: string
+  /** English name; `names` has it per locale. */
+  name: string
+  names: Record<string, string>
+  flag: string
+  rule_count: number
+  installed: boolean
+  /** Rules in this workspace that still come from the pack. */
+  rules_from_pack: number
+}
+
+/** Removing a pack deletes `remove` and keeps `keep`, the rules the user edited. */
+export interface RulePackRemoval {
+  remove: { id: string; name: string }[]
+  keep: { id: string; name: string }[]
+  /** Identifies this plan; removal is refused if the plan changed since. */
+  token: string
+}
+
+/** Text per locale; always has `en`. */
+export type LocalizedText = Record<string, string>
+
+export type PluginAction = 'install' | 'update' | 'remove'
+export type PluginItemKind = 'category_groups' | 'categories' | 'rules'
+
+/** One field of an integration's connection form. */
+export interface PluginField {
+  key: string
+  label: LocalizedText
+  /** Kept encrypted and never shown again. */
+  secret: boolean
+  required: boolean
+  /** `file`: the person picks a file (ADR 0035). */
+  type?: 'text' | 'file'
+  /** For a file: the extensions it takes (`.pdf`); empty for any. */
+  accept?: string[]
+  /** For a file: the largest it takes, in KB. */
+  max_kb?: number
+}
+
+/** A file picked for a file field, as sent to the API: its name and its content in base64. */
+export interface PluginFileValue {
+  name: string
+  content: string
+}
+
+/** Work an integration runs on its own schedule, apart from syncing (ADR 0035). */
+export interface PluginRoutine {
+  key: string
+  name: LocalizedText
+  description?: LocalizedText | null
+  every_minutes: number
+  timeout_seconds?: number | null
+}
+
+/** How one routine of a connection last ran. */
+export interface PluginConnectionRoutine {
+  key: string
+  every_minutes: number
+  last_run_at: string | null
+  last_error: string | null
+  failures: number
+}
+
+/** A connection to an outside service that a plugin with code offers. */
+export interface PluginIntegration {
+  key: string
+  name: LocalizedText
+  description?: LocalizedText | null
+  auth: 'credentials' | 'oauth' | 'none'
+  fields: PluginField[]
+  /** How often Securo asks the plugin to sync; null for never. */
+  sync_minutes: number | null
+  /** Work it runs on schedules of its own. */
+  routines?: PluginRoutine[]
+  /** Records it syncs as a connected bank; null for an integration that writes through the API. */
+  provides?: PluginProvidedKind[] | null
+}
+
+export type PluginProvidedKind = 'accounts' | 'transactions' | 'bills' | 'holdings' | 'trades'
+
+/** A host a plugin with code may reach, and why. */
+export interface PluginHost {
+  host: string
+  purpose: LocalizedText
+}
+
+/** What a plugin with code may read or change in the workspace, and why. */
+export interface PluginScope {
+  scope: string
+  purpose: LocalizedText
+}
+
+/** A theme a plugin adds to the library: colors for Securo's tokens, nothing else. */
+export interface PluginTheme {
+  key: string
+  name: LocalizedText
+  light: Record<string, string>
+  dark: Record<string, string>
+  radius?: number | null
+  font?: 'sans' | 'mono' | 'serif' | null
+}
+
+export interface InstalledPlugin {
+  plugin_id: string
+  name: LocalizedText
+  version: string
+  commit: string
+  installed_at: string
+  /** For plugins with code. */
+  integrations: PluginIntegration[]
+  network: PluginHost[]
+  api_scopes: PluginScope[]
+  /** For sign-in integrations: the address to register with the service. */
+  redirect_uri: string | null
+  /** Themes it adds to the library. */
+  themes?: PluginTheme[]
+  /** Reports it adds to the reports library. */
+  reports?: PluginReportDefinition[]
+  /** Dashboard widgets it adds to the library (ADR 0034). */
+  widgets?: PluginWidgetDefinition[]
+}
+
+export type PluginConnectionStatus = 'pending' | 'active' | 'error' | 'needs_auth'
+
+/** A connection made through a plugin. Its secrets never come back. */
+export interface PluginConnection {
+  id: string
+  plugin_id: string
+  integration: string
+  name: string
+  status: PluginConnectionStatus
+  /** Settings as typed; a file shows only its name and size. */
+  config: Record<string, string | { name: string; size: number }>
+  /** Secret fields that are set, by key. */
+  secret_fields: string[]
+  routines?: PluginConnectionRoutine[]
+  sync_minutes: number | null
+  last_sync_at: string | null
+  last_error: string | null
+  created_at: string
+}
+
+/** What the owner agrees to when adding, updating or removing a plugin with code. */
+export interface PluginCodeConsent {
+  network: PluginHost[]
+  api_scopes: PluginScope[]
+  integrations: {
+    key: string
+    name: LocalizedText
+    auth: PluginIntegration['auth']
+    provides?: PluginProvidedKind[] | null
+  }[]
+  /** On an update: hosts and scopes the installed version didn't have. */
+  new_hosts: string[]
+  new_scopes: string[]
+  /** Connections in this workspace, removed along with the plugin. */
+  connections: number
+  /** An update to a version without code: its connections go, as on removal. */
+  drops_code?: boolean
+  /** Bank connections the change ends: their accounts stay, as manual ones. */
+  unlinks?: number
+}
+
+export interface PluginCatalogEntry {
+  id: string
+  owner: string
+  repository: string
+  release: string
+  commit: string
+  name: LocalizedText
+  description: LocalizedText
+  version: string
+  license: string
+  min_securo_version: string
+  /** How many items of each kind the plugin brings, by contribution kind. */
+  contributes: Record<string, number>
+  locales: string[]
+  /** The repository's GitHub topics. */
+  topics: string[]
+  stars: number
+  /** Stars gained in the last 7 days. */
+  stars_7d: number
+  added_at: string | null
+  updated_at: string | null
+  revoked: boolean
+  revoked_reason: string | null
+  /** This Securo is at least min_securo_version. */
+  compatible: boolean
+  /** This Securo can apply everything the plugin contributes. */
+  supported: boolean
+  /** The workspace types it's meant for. */
+  workspaces: string[]
+  /** It's meant for this workspace's type. */
+  fits_workspace: boolean
+  /** Where Securo serves the plugin's icon; null draws the generated badge. */
+  icon_url: string | null
+  installed_version: string | null
+  update_available: boolean
+}
+
+/** An item a plugin points at: one of its own, or a built-in default. */
+export interface PluginRef {
+  key: string
+  name: LocalizedText
+  default: boolean
+}
+
+/** A report a plugin adds to the library: what it adds up, how it splits it, how it's drawn. */
+export interface PluginReportDefinition {
+  key: string
+  name: LocalizedText
+  description?: LocalizedText | null
+  /** Computed by the plugin's code, which returns a view; otherwise a query Securo runs. */
+  code?: boolean
+  inputs?: ('transactions' | 'accounts' | 'categories')[]
+  measure: 'expenses' | 'income' | 'net'
+  group_by?: 'category' | 'category_group' | 'payee' | 'account' | 'month' | null
+  chart: 'bar' | 'line' | 'area' | 'pie' | 'table'
+}
+
+/** A dashboard widget a plugin adds (ADR 0034): a report sized for a card, with the width it starts at. */
+export interface PluginWidgetDefinition extends PluginReportDefinition {
+  width: 'third' | 'half' | 'two_thirds' | 'full'
+  /** What it reads, counted back from the month on the dashboard. */
+  period: 'month' | 'year_to_date' | 'last_12_months'
+}
+
+/** How a value in a view is shown. A percent is the number itself: 12.5 is 12.5%. */
+export type ReportViewFormat = 'currency' | 'number' | 'percent' | 'text' | 'date'
+
+/** A report's view: blocks Securo draws with its own components (ADR 0028). */
+export interface ReportView {
+  currency?: string
+  blocks: ReportViewBlock[]
+}
+
+/** How much of a row a block takes, on wide screens; a phone stacks them. */
+export type ReportViewWidth = 'quarter' | 'third' | 'half' | 'two_thirds' | 'full'
+
+export interface ReportViewSeries {
+  name: string
+  values: (number | null)[]
+  color?: string | null
+  /** Drawn as bars, a line or an area, for a chart that mixes them. */
+  kind?: 'bar' | 'line' | 'area' | null
+  axis?: 'left' | 'right'
+  stack?: string | null
+  /** From this x on, a projection: drawn dashed. */
+  projected_from?: string | number | null
+  negative_color?: string | null
+}
+
+export interface ReportViewReference {
+  label?: string | null
+  y?: number | null
+  x?: string | number | null
+  axis?: 'left' | 'right'
+  color?: string | null
+}
+
+interface ReportViewBlockBase {
+  title?: string | null
+  width?: ReportViewWidth | null
+}
+
+export type ReportViewBlock = ReportViewBlockBase &
+  (
+    | { type: 'kpi'; label: string; value: number | null; format?: ReportViewFormat; delta?: number | null; delta_format?: ReportViewFormat | null; delta_good?: 'up' | 'down'; hint?: string | null }
+    | {
+        type: 'chart'
+        chart: 'bar' | 'stacked_bar' | 'horizontal_bar' | 'line' | 'area' | 'stacked_area' | 'pie' | 'donut' | 'scatter' | 'combo'
+        x: (string | number)[]
+        series: ReportViewSeries[]
+        format?: ReportViewFormat
+        y2_format?: ReportViewFormat | null
+        x_format?: 'text' | 'date' | 'month' | 'number'
+        /** A color per point, for a pie, a donut or a one-series bar chart. */
+        colors?: (string | null)[] | null
+        references?: ReportViewReference[]
+      }
+    | { type: 'heatmap'; x: (string | number)[]; y: (string | number)[]; values: (number | null)[][]; format?: ReportViewFormat; x_format?: 'text' | 'date' | 'month' | 'number'; color?: string | null }
+    | { type: 'treemap'; items: { name: string; value?: number | null; color?: string | null; children?: { name: string; value: number; color?: string | null }[] }[]; format?: ReportViewFormat }
+    | { type: 'sankey'; nodes: string[]; links: { source: number; target: number; value: number }[]; format?: ReportViewFormat }
+    | { type: 'waterfall'; steps: { label: string; value: number; total?: boolean }[]; format?: ReportViewFormat }
+    | { type: 'progress'; items: { label: string; value: number; target: number; color?: string | null; hint?: string | null }[]; format?: ReportViewFormat; over_is?: 'bad' | 'good' }
+    | {
+        type: 'table'
+        columns: { key: string; label: string; format?: ReportViewFormat; total?: boolean; bar?: boolean; signed?: boolean }[]
+        rows: Record<string, string | number | null>[]
+        sort_by?: string | null
+        sort_ascending?: boolean
+        page_size?: number
+      }
+    | { type: 'text'; text: string }
+  )
+
+/** A plugin's report, added up by Securo for the period asked. */
+export interface PluginReportResponse {
+  key: string
+  code?: boolean
+  measure?: PluginReportDefinition['measure'] | null
+  group_by?: PluginReportDefinition['group_by']
+  chart?: PluginReportDefinition['chart'] | null
+  currency: string
+  /** A query report's groups. `label` is null for the rows the page names: `none` and `other`. */
+  rows: { key: string; label: string | null; value: number; color: string | null }[]
+  total: number
+  /** A code report's view, as the plugin drew it. */
+  view?: ReportView | null
+}
+
+export interface PluginContents {
+  category_groups: { key: string; name: LocalizedText; icon: string; color: string }[]
+  categories: {
+    key: string
+    name: LocalizedText
+    icon: string
+    color: string
+    group: PluginRef | null
+    treat_as_transfer: boolean
+  }[]
+  rules: {
+    key: string
+    name: string
+    priority: number
+    conditions_op: 'and' | 'or'
+    conditions: RuleConditionNode[]
+    actions: { op: string; value?: string | boolean | null; category: PluginRef | null }[]
+  }[]
+  integrations?: PluginIntegration[]
+  network?: PluginHost[]
+  api_scopes?: PluginScope[]
+  themes?: PluginTheme[]
+  reports?: PluginReportDefinition[]
+  widgets?: PluginWidgetDefinition[]
+}
+
+/** One plugin opened from the catalog. */
+export interface PluginDetail {
+  plugin: PluginCatalogEntry
+  /** Markdown, from the catalog's verified copy. */
+  readme: string | null
+  /** Null when this Securo can't read what the plugin contains. */
+  contents: PluginContents | null
+}
+
+export interface PluginItem {
+  kind: PluginItemKind
+  key: string
+  name: string
+}
+
+/** What installing, updating or removing a plugin does, item by item. */
+export interface PluginPlan {
+  action: PluginAction
+  plugin_id: string
+  version: string | null
+  commit: string | null
+  token: string
+  create: PluginItem[]
+  update: PluginItem[]
+  delete: PluginItem[]
+  /** Edited by the user: left as they are. */
+  keep: PluginItem[]
+  /** No longer the plugin's (edited, or still in use): handed over to the user. */
+  release: PluginItem[]
+  /** Already in the workspace by name: left alone. */
+  existing: PluginItem[]
+  unresolved: PluginItem[]
+  default_categories: string[]
+  /** For plugins with code: what the owner agrees to. */
+  code?: PluginCodeConsent | null
+  /** Themes it adds to the library and takes out of it (members using one go back to Securo's own). */
+  themes?: { added: { key: string; name: LocalizedText }[]; removed: { key: string; name: LocalizedText }[] } | null
+}
+
 export interface RuleExportPayload {
   format: 'securo-categorization-rules'
   version: number
@@ -625,6 +1163,7 @@ export interface RulePreviewItem {
   type: 'debit' | 'credit'
   current_category_id: string | null
   current_category_name: string | null
+  current_has_category_lines?: boolean
   new_category_id: string | null
   new_category_name: string | null
   will_change: boolean
@@ -675,12 +1214,132 @@ export interface ImportPreviewTransaction {
   category_id?: string | null
   force_uncategorized?: boolean
   notes?: string | null
+  /** A split across categories read back from a CSV export. */
+  category_lines?: { category_name: string; amount: number }[] | null
 }
 
 export interface ImportReviewTransaction extends ImportPreviewTransaction {
   _id: string
   excluded: boolean
   selected_category_id?: string | null
+}
+
+export type DocumentKind = 'statement' | 'receipt'
+export type DocumentVision = 'yes' | 'no' | 'unknown'
+
+export interface DocumentAiStatus {
+  /** An owner picked a connection that still works for this workspace. */
+  enabled: boolean
+  configured: boolean
+  connection_id: string | null
+  connection_name: string | null
+  provider: string | null
+  model: string | null
+  vision: DocumentVision
+  vision_source: 'setting' | 'provider' | 'catalog' | 'none'
+  max_file_size_mb: number
+  max_pages: number
+}
+
+export interface DocumentAiSettings {
+  connection_id: string | null
+  /** Replaces the connection's default model when set. */
+  model: string | null
+  vision: 'auto' | 'true' | 'false'
+}
+
+export interface DocumentAiSettingsUpdate {
+  connection_id: string | null
+  model: string | null
+  vision: 'auto' | 'true' | 'false'
+}
+
+export interface DocumentBalanceCheck {
+  opening_balance: string
+  closing_balance: string
+  computed_closing_balance: string
+  difference: string
+  ok: boolean
+}
+
+export interface DocumentStatementInfo {
+  kind: 'bank' | 'credit_card' | 'other'
+  institution: string | null
+  account_name: string | null
+  account_last_digits: string | null
+  currency: string | null
+  period_start: string | null
+  period_end: string | null
+  opening_balance: string | null
+  closing_balance: string | null
+}
+
+export interface DocumentReceiptInfo {
+  merchant: string | null
+  merchant_tax_id: string | null
+  date: string | null
+  total: string | null
+  currency: string | null
+  kind: 'purchase' | 'refund'
+  payment_method: string | null
+  category_hint: string | null
+  items: { description: string; amount: string }[]
+}
+
+export interface DocumentReceiptMatch {
+  transaction_id: string
+  date: string
+  description: string
+  amount: string
+  currency: string
+  type: 'debit' | 'credit'
+  account_id: string
+  account_name: string
+  attachments: number
+}
+
+export interface DocumentExtraction {
+  id: string
+  kind: DocumentKind
+  status: 'pending' | 'processing' | 'done' | 'failed'
+  filename: string
+  content_type: string
+  size: number
+  provider: string | null
+  model: string | null
+  method: 'text' | 'vision' | null
+  pages: number | null
+  error_code: string | null
+  error: string | null
+  created_at: string
+  completed_at: string | null
+  confirmed_at: string | null
+  transaction_id: string | null
+  import_log_id: string | null
+  statement: DocumentStatementInfo | null
+  transactions: ImportPreviewTransaction[]
+  balance_check: DocumentBalanceCheck | null
+  suggested_account_id: string | null
+  dropped: number
+  truncated: boolean
+  /** Scanned pages the model could not read (it takes no images). */
+  unread_pages: number[]
+  /** False when a transaction was created but its file could not be stored. */
+  attached: boolean | null
+  receipt: DocumentReceiptInfo | null
+  matches: DocumentReceiptMatch[]
+  suggested_category_id: string | null
+}
+
+export interface DocumentReceiptTransaction {
+  account_id: string
+  description: string
+  amount: number
+  date: string
+  type: 'debit' | 'credit'
+  currency?: string | null
+  category_id?: string | null
+  notes?: string | null
 }
 
 export interface FailedRow {
@@ -709,6 +1368,51 @@ export interface RecurringTransaction {
   next_occurrence: string
   amount_primary: number | null
   fx_rate_used: number | null
+  /** Split across categories: every occurrence starts with these parts. */
+  has_category_lines?: boolean
+  category_lines?: TransactionCategoryLine[]
+}
+
+// Read-only price-change projections. Derived from linked transaction
+// history on the backend; never written back and never mutated client-side.
+export type RecurringPriceChangeEligibility =
+  | 'insufficient_history'
+  | 'no_qualifying_change'
+  | 'changes_detected'
+
+export interface RecurringPriceChange {
+  recurring_id: string
+  previous_transaction_id: string
+  current_transaction_id: string
+  previous_date: string
+  current_date: string
+  // Exact two-decimal JSON strings; coerce only for display formatting.
+  previous_amount: string
+  current_amount: string
+  currency: string
+  direction: 'increase' | 'decrease'
+  absolute_delta: string
+  percent_delta: string
+  gap_days: number
+  baseline_occurrence_count: number
+}
+
+export interface RecurringPriceChangeHistory {
+  recurring_id: string
+  eligible_occurrence_count: number
+  eligibility: RecurringPriceChangeEligibility
+  changes: RecurringPriceChange[]
+}
+
+/** What the active recurring definitions expect in one month (#532). */
+export interface RecurringMonthSummary {
+  month: string
+  currency: string
+  income: string
+  expenses: string
+  net: string
+  transfer_count: number
+  unconverted_count: number
 }
 
 export interface ProjectedTransaction {
@@ -720,11 +1424,23 @@ export interface ProjectedTransaction {
   currency: string
   type: 'debit' | 'credit'
   date: string
+  /** The card bill's due date in accrual mode, else `date`. */
+  reporting_date?: string | null
   category_id: string | null
   category_name: string | null
   category_icon: string | null
   category_color: string | null
   category_treat_as_transfer: boolean
+  /** Split recurring template: the parts, in the occurrence's currency. */
+  has_category_lines?: boolean
+  category_lines?: {
+    category_id: string
+    category_name: string | null
+    category_icon: string | null
+    category_color: string | null
+    amount: number
+    treat_as_transfer: boolean
+  }[]
 }
 
 export interface TransactionCalendarItem {
@@ -749,6 +1465,7 @@ export interface TransactionCalendarItem {
   is_transfer: boolean
   is_ignored: boolean
   exclude_from_pnl: boolean
+  has_category_lines?: boolean
 }
 
 export interface TransactionCalendarDay {
@@ -799,6 +1516,12 @@ export interface DashboardSummary {
   pending_categorization_amount: number
   assets_value: Record<string, number>
   assets_value_primary: number
+  /** Checking + savings + wallet (spendable / near-liquid). */
+  cash_balance?: Record<string, number>
+  cash_balance_primary?: number
+  /** Accounts with type=investment (brokerage cash), distinct from assets_value. */
+  investment_accounts?: Record<string, number>
+  investment_accounts_primary?: number
   primary_currency: string
   // At least one currency bucket had no real FX rate, so the *_primary
   // totals sum it at 1:1 and are an estimate, not a conversion (issue #1165).
@@ -857,7 +1580,11 @@ export interface Budget {
   id: string
   user_id: string
   category_id: string
+  /** In `currency`, the currency it was typed in. */
   amount: number
+  currency?: string | null
+  /** The same limit in the viewer's display currency. */
+  amount_primary?: number | string | null
   month: string
   is_recurring: boolean
 }
@@ -926,12 +1653,15 @@ export interface Asset {
   isin: string | null
   maturity_date: string | null
   group_id: string | null
-  investment_category: string | null
+  investment_category?: string | null
   ticker: string | null
   ticker_exchange: string | null
   last_price: number | null
   last_price_at: string | null
   logo_url: string | null
+  // Date the sync provider says current_value refers to (YYYY-MM-DD), when it
+  // reports one. A stale date is the sign that a position stopped updating.
+  provider_value_date: string | null
   // Ledger-derived (issue #235): weighted-average cost per unit (preço médio),
   // cost basis of held units, cumulative realized gain, and whether the holding
   // is driven by the transactions ledger.
@@ -939,6 +1669,11 @@ export interface Asset {
   total_invested: number | null
   realized_gain: number | null
   transaction_count: number
+  /** Sold holdings only: average buy and sell price, cost of what was sold and what it brought in. */
+  average_buy_price?: number | null
+  average_sell_price?: number | null
+  sold_cost?: number | null
+  sale_proceeds?: number | null
 }
 
 /** One order read from a broker CSV, before it reaches a holding. */
@@ -946,7 +1681,8 @@ export interface AssetOrderImport {
   row: number
   ticker: string
   date: string
-  kind: 'buy' | 'sell'
+  kind: 'buy' | 'sell' | 'split'
+  /** 0 on a split, which carries its ratio in old_units → new_units. */
   quantity: number
   price: number
   fee: number
@@ -954,6 +1690,13 @@ export interface AssetOrderImport {
   name: string | null
   notes: string | null
   external_id: string | null
+  old_units?: number | null
+  new_units?: number | null
+  /** Preview only: what the price and the fee become in the holding's currency
+   *  when the file paid in another one. Never read back by the import. */
+  converted_price?: number | null
+  converted_fee?: number | null
+  converted_currency?: string | null
 }
 
 export interface AssetImportRowError {
@@ -992,13 +1735,17 @@ export interface AssetImportResult {
 export interface AssetTransaction {
   id: string
   asset_id: string
-  kind: 'buy' | 'sell'
+  kind: 'buy' | 'sell' | 'split'
   quantity: number
   price: number
   fee: number
   date: string
   source: string
   notes: string | null
+  // Split only: the units held before the split became `new_units` after it
+  // (a 100-for-1 split is 1 → 100). Null on buys and sells.
+  old_units: number | null
+  new_units: number | null
   asset_name: string | null
   ticker: string | null
   currency: string | null
@@ -1019,6 +1766,71 @@ export interface MarketSymbolQuote {
   currency: string
   price: number
   quote_type: string | null
+}
+
+export interface BenchmarkMatch {
+  symbol: string
+  name: string
+  exchange: string | null
+  provider: 'yahoo' | 'b3'
+}
+
+export type PortfolioPerformancePeriod = '3m' | '6m' | 'ytd' | '1y' | '3y' | '5y'
+
+export interface PortfolioPerformancePoint {
+  date: string
+  portfolio: number
+  benchmark: number | null
+  // A benchmark is absent on dates before its own start_date.
+  benchmarks: Record<string, number>
+}
+
+export interface BenchmarkPerformance {
+  key: string
+  symbol: string
+  provider: 'yahoo' | 'b3'
+  benchmark_return: number | null
+  excess_return: number | null
+  source_error?: 'unavailable' | 'rate_limited' | 'no_data' | 'no_fx_rate' | null
+  // First date this benchmark is compared from. Later than the response's
+  // start_date when the benchmark's history begins after the portfolio's.
+  start_date: string | null
+}
+
+export interface HoldingTradeImport {
+  available: boolean
+  enabled: boolean
+  // Connected holdings whose provider trades couldn't be imported.
+  issues: HoldingTradeImportIssue[]
+}
+
+export interface HoldingTradeImportIssue {
+  connection_id: string
+  asset_id: string
+  name: string
+  ticker: string | null
+  // incomplete: the history doesn't add up to the share count reported now.
+  // no_history: the provider returned no trades at all.
+  status: 'incomplete' | 'no_history'
+}
+
+export interface PortfolioPerformance {
+  benchmark_symbol: string | null
+  benchmark_provider: string | null
+  period: PortfolioPerformancePeriod
+  start_date: string
+  end_date: string
+  portfolio_return: number | null
+  benchmark_return: number | null
+  excess_return: number | null
+  benchmarks: BenchmarkPerformance[]
+  points: PortfolioPerformancePoint[]
+}
+
+export interface AssetPriceRefreshResult {
+  refreshed: number
+  skipped: number
+  rate_limited: number
 }
 
 export interface AssetGroup {
@@ -1179,6 +1991,33 @@ export interface ReportResponse {
   meta: ReportMeta
   composition: ReportCompositionItem[]
   category_trend: CategoryTrendItem[]
+}
+
+// Income & expense statement: signed net amounts (credits positive, debits
+// negative) per category group, aligned with `CategoryStatementResponse.months`.
+export interface CategoryStatementRow {
+  key: string
+  kind: 'group' | 'category' | 'uncategorized'
+  label: string | null
+  icon: string | null
+  color: string | null
+  category_ids: string[]
+  txn_type: 'credit' | 'debit' | null
+  values: number[]
+  children: CategoryStatementRow[]
+}
+
+export interface CategoryStatementSection {
+  totals: number[]
+  rows: CategoryStatementRow[]
+}
+
+export interface CategoryStatementResponse {
+  currency: string
+  /** "YYYY-MM", newest first. */
+  months: string[]
+  income: CategoryStatementSection
+  expenses: CategoryStatementSection
 }
 
 // --- Invoices -------------------------------------------------------------
@@ -1749,7 +2588,7 @@ export interface ReconciliationConditions {
   /** Only pairs where one of the two legs sits on an account of this
    *  kind. Either leg is enough: a rule that exists to be careful about
    *  credit cards has to fire whichever end the card is on. */
-  account_types?: ('checking' | 'savings' | 'credit_card' | 'investment' | 'wallet')[]
+  account_types?: AccountType[]
   /** One side's statement text has to name the other side's account. The
    *  signal that tells two same-day transfers of the same amount apart,
    *  when one line reads "To FORTUNEO ACCOUNT" and the other does not. */
@@ -1951,4 +2790,85 @@ export interface LoanSchedule {
   projected_payoff_date: string | null
   paid_off: boolean
   installments: LoanInstallment[]
+}
+
+export type AppNotificationKind =
+  | 'connection_error'
+  | 'recurring_failed'
+  | 'budget_threshold'
+  | 'flag_overdue'
+  | 'reconciliation_pending'
+  | 'invoice_overdue'
+  | 'group_expense'
+  | 'group_settlement'
+  | 'backup_failed'
+
+export interface NotificationPreference {
+  kind: AppNotificationKind
+  /** Each channel that reaches the person: `in_app`, and any other set up. */
+  channels: Record<string, boolean>
+}
+
+/** A notification of the current workspace: facts, the text is the client's. */
+export type AppNotification = {
+  id: string
+  notified_at: string
+  read_at: string | null
+  resolved_at: string | null
+} & (
+  | {
+      kind: 'connection_error'
+      data: {
+        name: string
+        connection_id: string
+        plugin_id?: string
+        code: 'consent_expired' | 'psu_present_required' | 'reauthorize_at_provider' | 'provider_error' | 'rate_limited'
+      }
+    }
+  | { kind: 'recurring_failed'; data: { recurring_id: string; name: string; date: string } }
+  | {
+      kind: 'budget_threshold'
+      data: {
+        category_id: string
+        name: string
+        month: string
+        threshold: number
+        actual: string
+        budget: string
+        currency: string
+      }
+    }
+  | { kind: 'flag_overdue'; data: { count: number } }
+  | { kind: 'reconciliation_pending'; data: { count: number } }
+  | {
+      kind: 'invoice_overdue'
+      data: { invoice_id: string; name: string; date: string; amount: string; currency: string }
+    }
+  | {
+      kind: 'group_expense'
+      data: { group_id: string; group: string; actor: string } & (
+        | { count: number }
+        | { transaction_id: string; name: string; share: string; currency: string; changed: boolean }
+      )
+    }
+  | {
+      kind: 'group_settlement'
+      data: {
+        settlement_id: string
+        group_id: string
+        group: string
+        actor: string
+        payer: string
+        receiver: string
+        amount: string
+        currency: string
+      }
+    }
+  | { kind: 'backup_failed'; data: { failed_at: string } }
+)
+
+export interface AppNotificationList {
+  items: AppNotification[]
+  total: number
+  unread_count: number
 }

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,6 +17,16 @@ class WorkspaceProviderCredential(Base):
     """
 
     __tablename__ = "workspace_provider_credentials"
+    __table_args__ = (
+        Index(
+            "uq_workspace_provider_credentials_active",
+            "workspace_id",
+            "provider",
+            unique=True,
+            postgresql_where=text("is_active AND retired_at IS NULL"),
+            sqlite_where=text("is_active AND retired_at IS NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(

@@ -16,6 +16,15 @@ from mcp_server.auth import CallContext
 ToolHandler = Callable[..., Awaitable[Any]]
 
 
+class ToolInputError(ValueError):
+    """A tool refused an argument value it does not know.
+
+    Expected, not a bug: the model sent something the schema did not hold it
+    to. The server reports it as a tool result and logs it without a
+    traceback, unlike a handler that crashes.
+    """
+
+
 @dataclass
 class ToolSpec:
     name: str
@@ -95,14 +104,14 @@ async def call_tool(
     if spec is None:
         raise KeyError(f"unknown tool: {name}")
     from app.core.app_clock import use_timezone
-    from mcp_server.tools._helpers import resolve_workspace_id
+    from app.core.row_security import bind_workspace
+    from mcp_server.auth import ToolAccessDenied, authorize_call
 
-    # A token minted before workspaces existed carries no `ws_id`; the tool
-    # resolves the default workspace itself, and a caller with none at all
-    # still gets the application timezone rather than an error here.
-    try:
-        workspace_id = await resolve_workspace_id(session, ctx)
-    except ValueError:
-        workspace_id = None
+    # Membership and role are re-read on every call: the token alone does
+    # not prove the user still belongs to the workspace it names.
+    workspace_id = await authorize_call(session, ctx)
+    if ctx.external and (arguments or {}).get("apply") and not ctx.can_write:
+        raise ToolAccessDenied("Your role in this workspace is read-only, so changes can't be applied.")
+    await bind_workspace(session, workspace_id, None if ctx.external else ctx.user_id)
     async with use_timezone(session, workspace_id):
         return await spec.handler(session=session, ctx=ctx, **(arguments or {}))

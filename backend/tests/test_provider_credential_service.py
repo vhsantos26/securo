@@ -55,7 +55,7 @@ async def test_rotating_active_profile_does_not_change_existing_connection(
         session, test_workspace.id, "pluggy", connection.provider_credential_id
     )
     assert resolved is not None and resolved.id == original.id
-    assert provider._client_id == "client-old"
+    assert provider.settings.pluggy_client_id == "client-old"
     assert replacement.id != original.id
 
 
@@ -101,7 +101,7 @@ async def test_legacy_connection_never_switches_to_new_active_profile_implicitly
     # This is the sync/reconnect path for a pre-feature connection whose
     # credential pointer is null. Without an environment fallback it must fail,
     # never silently use the newly active workspace profile.
-    with patch("app.services.provider_credential_service._environment_pluggy_configured", return_value=False):
+    with patch("app.services.provider_credential_service._instance_pluggy_configured", return_value=False):
         with pytest.raises(ProviderNotConfiguredError):
             await service.resolve_provider(
                 session,

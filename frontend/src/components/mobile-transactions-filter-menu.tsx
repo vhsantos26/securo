@@ -6,9 +6,12 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  CircleDashed,
   Coins,
   CreditCard,
   EyeClosed,
+  Flag,
+  Inbox,
   ListChecks,
   Store,
   Tag,
@@ -26,6 +29,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { getAccountName } from '@/lib/account-utils'
 import { cn } from '@/lib/utils'
+import type { FlagFilter } from '@/lib/transaction-flag'
 import type { Account, AccountCard, Category, CategoryGroup, Group, Payee } from '@/types'
 
 export type MobileFilterView =
@@ -38,6 +42,9 @@ export type MobileFilterView =
   | 'type'
   | 'status'
   | 'ignored'
+  | 'flagged'
+  | 'unpaid'
+  | 'unread'
   | 'date'
   | 'amount'
 
@@ -67,6 +74,12 @@ interface MobileTransactionsFilterMenuProps {
   type: string
   status: string
   hideIgnored: boolean
+  filterUnpaid: boolean
+  flagFilter: FlagFilter
+  flagOptions: { value: FlagFilter; label: string }[]
+  onlyUnread: boolean
+  /** Offer the review-queue option at all; the calendar view passes false. */
+  showUnread?: boolean
   from: string
   to: string
   minAmount: string
@@ -87,6 +100,9 @@ interface MobileTransactionsFilterMenuProps {
   onTypeChange: (value: string) => void
   onStatusChange: (value: string) => void
   onHideIgnoredChange: (value: boolean) => void
+  onUnpaidChange: (value: boolean) => void
+  onFlagFilterChange: (value: FlagFilter) => void
+  onOnlyUnreadChange: (value: boolean) => void
   onDateRangeChange: (from: string, to: string) => void
   onAmountRangeChange: (min: string, max: string) => void
   onApplyAmountRange: () => void
@@ -194,7 +210,7 @@ function MobileDetailHeader({
       <button
         type="button"
         onClick={onBack}
-        className="flex w-full items-center gap-1 rounded-sm px-2 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+        className="flex w-full items-center gap-1 rounded-sm px-2 py-1.5 text-start text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
       >
         <ChevronLeft size={14} />
         {t('common.back')}
@@ -224,7 +240,7 @@ function MobileAccountOption({
       }}
       className="gap-2 py-2 text-[13px]"
     >
-      <span className="min-w-0 flex-1 truncate text-left">
+      <span className="min-w-0 flex-1 truncate text-start">
         {getAccountName(account)}
       </span>
       {account.currency && (
@@ -507,8 +523,9 @@ function buildRootOptions(
   labels: Record<Exclude<MobileFilterView, 'root'>, string>,
   summaries: MobileTransactionsFilterMenuProps['summaries'],
   hasLinkedCards: boolean,
+  showUnread: boolean,
 ): RootOption[] {
-  return [
+  const options: RootOption[] = [
     { view: 'account', icon: Wallet, label: labels.account, summary: summaries.account },
     ...(hasLinkedCards ? [{ view: 'card' as const, icon: CreditCard, label: labels.card, summary: summaries.card }] : []),
     { view: 'category', icon: Tag, label: labels.category, summary: summaries.category },
@@ -517,9 +534,20 @@ function buildRootOptions(
     { view: 'type', icon: ArrowUpDown, label: labels.type, summary: summaries.type },
     { view: 'status', icon: ListChecks, label: labels.status, summary: summaries.status },
     { view: 'ignored', icon: EyeClosed, label: labels.ignored, summary: summaries.ignored },
+    { view: 'flagged', icon: Flag, label: labels.flagged, summary: summaries.flagged },
+    { view: 'unpaid', icon: CircleDashed, label: labels.unpaid, summary: summaries.unpaid },
     { view: 'date', icon: CalendarIcon, label: labels.date, summary: summaries.date },
     { view: 'amount', icon: Coins, label: labels.amount, summary: summaries.amount },
   ]
+  if (!showUnread) return options
+  // The review queue sits next to the ignored switch, its sibling reading mode.
+  options.splice(7, 0, {
+    view: 'unread',
+    icon: Inbox,
+    label: labels.unread,
+    summary: summaries.unread,
+  })
+  return options
 }
 
 function buildLabels(
@@ -534,6 +562,9 @@ function buildLabels(
     type: t('transactions.type'),
     status: t('transactions.status'),
     ignored: t('transactions.ignoredRows'),
+    flagged: t('transactions.flagged'),
+    unpaid: t('transactions.onlyUnpaid'),
+    unread: t('transactions.unreadRows'),
     date: t('transactions.filtersBar.date'),
     amount: t('transactions.filtersBar.amount'),
   }
@@ -578,13 +609,30 @@ function MobileFilterDetail({
     ]
     return <MobileSelectionView options={options} selectedValue={menu.hideIgnored ? 'hide' : 'show'} onChange={(value) => menu.onHideIgnoredChange(value === 'hide')} />
   }
+  if (menu.view === 'flagged') {
+    return <MobileSelectionView options={menu.flagOptions} selectedValue={menu.flagFilter} onChange={(value) => menu.onFlagFilterChange(value as FlagFilter)} />
+  }
+  if (menu.view === 'unpaid') {
+    const options = [
+      { value: 'all', label: t('transactions.all') },
+      { value: 'unpaid', label: t('transactions.onlyUnpaid') },
+    ]
+    return <MobileSelectionView options={options} selectedValue={menu.filterUnpaid ? 'unpaid' : 'all'} onChange={(value) => menu.onUnpaidChange(value === 'unpaid')} />
+  }
+  if (menu.view === 'unread') {
+    const options = [
+      { value: 'all', label: t('transactions.all') },
+      { value: 'unread', label: t('transactions.onlyUnread') },
+    ]
+    return <MobileSelectionView options={options} selectedValue={menu.onlyUnread ? 'unread' : 'all'} onChange={(value) => menu.onOnlyUnreadChange(value === 'unread')} />
+  }
   if (menu.view === 'date') {
     return <MobileDateView from={menu.from} to={menu.to} presets={menu.datePresets} onChange={menu.onDateRangeChange} onOpenCustomRange={menu.onOpenCustomRange} />
   }
   if (menu.view === 'amount') {
     return <MobileAmountView minAmount={menu.minAmount} maxAmount={menu.maxAmount} setMinAmount={menu.setMinAmount} setMaxAmount={menu.setMaxAmount} onReset={() => resetAmount(menu)} onApply={menu.onApplyAmountRange} />
   }
-  return <MobileFilterRoot options={buildRootOptions(labels, menu.summaries, menu.linkedCards.length > 0)} hasAnyFilter={menu.hasAnyFilter} onSelect={(view) => openDetail(menu, view)} onClear={() => clearAll(menu)} />
+  return <MobileFilterRoot options={buildRootOptions(labels, menu.summaries, menu.linkedCards.length > 0, menu.showUnread !== false)} hasAnyFilter={menu.hasAnyFilter} onSelect={(view) => openDetail(menu, view)} onClear={() => clearAll(menu)} />
 }
 
 function openDetail(

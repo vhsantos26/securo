@@ -229,8 +229,8 @@ async def test_monthly_report_follows_mode(session, test_user, test_account, mon
             currency="BRL", date=when, effective_date=effective, type="debit", source="manual",
         ))
     await session.commit()
-    for mode, expected in [("cash", {"2025-12": 120, "2026-01": 30}),
-                           ("accrual", {"2025-12": 0, "2026-01": 150})]:
+    for mode, expected in [("purchase_date", {"2025-12": 120, "2026-01": 30}),
+                           ("invoice_due_date", {"2025-12": 0, "2026-01": 150})]:
         await admin_service.set_app_setting(session, "credit_card_accounting_mode", mode)
         report = await report_service.get_income_expenses_report(
             session, test_account.workspace_id, test_user.id, months=3, interval="monthly", currency="BRL",

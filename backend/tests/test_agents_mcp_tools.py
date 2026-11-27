@@ -6,6 +6,8 @@ dashboard) just check that the wrapper returns a serializable shape, not
 the full numeric correctness of those services.
 """
 import uuid
+from datetime import date, timedelta
+from decimal import Decimal
 
 import pytest
 import pytest_asyncio
@@ -13,6 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 # Importing this package registers all tools into mcp_server.registry.REGISTRY.
 import mcp_server.tools  # noqa: F401
+from app.models.account import Account
+from app.models.transaction import Transaction
+from app.schemas.account import AccountCreate
+from app.services import account_service
 from mcp_server.auth import CallContext
 from mcp_server.registry import REGISTRY
 
@@ -45,10 +51,14 @@ def test_registry_contains_v1_tools():
         "propose_create_budget",
         "propose_create_payee_rule",
         "propose_create_transaction",
+        "propose_update_transaction",
         "propose_create_recurring_transaction",
         "propose_update_recurring_transaction",
         "propose_cancel_recurring_transaction",
         "propose_create_goal",
+        "propose_update_payee",
+        "propose_merge_payees",
+        "propose_create_payee",
         "search_knowledge_base",
         "list_recurring_transactions",
         "list_assets",
@@ -60,7 +70,15 @@ def test_registry_contains_v1_tools():
 
 
 def test_proposal_tools_marked_is_proposal():
-    for name in ("propose_categorize", "propose_create_category", "propose_create_budget", "propose_create_payee_rule"):
+    for name in (
+        "propose_categorize",
+        "propose_create_category",
+        "propose_create_budget",
+        "propose_create_payee_rule",
+        "propose_update_payee",
+        "propose_merge_payees",
+        "propose_create_payee",
+    ):
         spec = REGISTRY[name]
         assert spec.is_proposal, f"{name} should have is_proposal=True"
 
@@ -152,16 +170,59 @@ async def test_list_transactions_tx_type_filter(
     assert debits["total"] + credits["total"] >= len(debits["items"])  # sanity
 
 
+async def test_list_transactions_reads_all_and_aggregate_words(
+    session: AsyncSession, ctx: CallContext, test_transactions
+):
+    """The aggregate tool takes status='all' and tx_type='expense'; a model
+    passing the same here used to get an empty list, and kept retrying."""
+    handler = REGISTRY["list_transactions"].handler
+    everything = await handler(session=session, ctx=ctx)
+    assert (await handler(session=session, ctx=ctx, status="all"))["total"] == everything["total"] > 0
+    debits = await handler(session=session, ctx=ctx, tx_type="debit")
+    assert (await handler(session=session, ctx=ctx, tx_type="expense"))["total"] == debits["total"]
+    credits = await handler(session=session, ctx=ctx, tx_type="credit")
+    assert (await handler(session=session, ctx=ctx, tx_type="income"))["total"] == credits["total"]
+
+
+async def test_list_transactions_schema_lists_every_tx_type_word(
+    session: AsyncSession, ctx: CallContext, test_transactions
+):
+    """`expense` and `income` work as filters, so the schema has to offer
+    them; an enum with only debit/credit told the model they don't exist."""
+    schema = REGISTRY["list_transactions"].parameters["properties"]["tx_type"]
+    assert schema["enum"] == ["debit", "credit", "expense", "income"]
+    assert "expense" in schema["description"] and "income" in schema["description"]
+
+
+async def test_list_transactions_refuses_an_unknown_tx_type(
+    session: AsyncSession, ctx: CallContext, test_transactions
+):
+    import pytest
+
+    handler = REGISTRY["list_transactions"].handler
+    with pytest.raises(ValueError, match="debit, credit, expense, income"):
+        await handler(session=session, ctx=ctx, tx_type="transfer")
+
+
+async def test_list_transactions_refuses_an_unknown_status(
+    session: AsyncSession, ctx: CallContext, test_transactions
+):
+    import pytest
+
+    handler = REGISTRY["list_transactions"].handler
+    with pytest.raises(ValueError, match="posted, pending, all"):
+        await handler(session=session, ctx=ctx, status="settled")
+
+
 async def test_list_transactions_currency_filter_matches_native(
     session: AsyncSession, ctx: CallContext, test_transactions
 ):
-    """The Transaction.currency column defaults to USD in the fixture
-    (independent of the account's BRL currency), so 'USD' should return
+    """The fixture rows carry the account's currency, so 'BRL' should return
     everything and any narrower filter returns ≤ that count."""
     handler = REGISTRY["list_transactions"].handler
-    usd = await handler(session=session, ctx=ctx, currency="USD")
-    assert usd["total"] >= 1
-    assert all(x["currency"] == "USD" for x in usd["items"])
+    brl = await handler(session=session, ctx=ctx, currency="BRL")
+    assert brl["total"] >= 1
+    assert all(x["currency"] == "BRL" for x in brl["items"])
 
 
 async def test_list_transactions_currency_filter_returns_zero_for_unused(
@@ -180,8 +241,11 @@ async def test_list_transactions_currency_filter_is_case_insensitive(
     session: AsyncSession, ctx: CallContext, test_transactions
 ):
     handler = REGISTRY["list_transactions"].handler
-    a = await handler(session=session, ctx=ctx, currency="usd")
-    b = await handler(session=session, ctx=ctx, currency="USD")
+    a = await handler(session=session, ctx=ctx, currency="brl")
+    b = await handler(session=session, ctx=ctx, currency="BRL")
+    # Against the BRL fixture rows a nonempty result is what proves the
+    # match stayed case-insensitive; two empty results would prove nothing.
+    assert a["total"] >= 1
     assert a["total"] == b["total"]
 
 
@@ -219,6 +283,58 @@ async def test_list_recurring_transactions_returns_empty_dict_with_no_data(
     handler = REGISTRY["list_recurring_transactions"].handler
     r = await handler(session=session, ctx=ctx)
     assert r == {"items": [], "total": 0}
+
+
+async def test_list_accounts_reports_current_balance(
+    session: AsyncSession, ctx: CallContext, test_user, test_account, test_connection
+):
+    """A manual account's balance is its opening balance plus its
+    transactions, as on the Accounts page, not the stored opening amount."""
+    ws_id = test_account.workspace_id
+    manual = await account_service.create_account(
+        session,
+        ws_id,
+        test_user.id,
+        AccountCreate(name="Manual", type="checking", balance=Decimal("100.00"), currency="BRL"),
+    )
+    for amount, tx_type in (("50.00", "credit"), ("20.00", "debit")):
+        session.add(
+            Transaction(
+                id=uuid.uuid4(),
+                user_id=test_user.id,
+                workspace_id=ws_id,
+                account_id=manual.id,
+                description=f"Seeded {tx_type}",
+                amount=Decimal(amount),
+                date=date.today() - timedelta(days=1),
+                type=tx_type,
+                source="manual",
+                currency="BRL",
+            )
+        )
+    session.add(
+        Account(
+            id=uuid.uuid4(),
+            user_id=test_user.id,
+            workspace_id=ws_id,
+            connection_id=test_connection.id,
+            external_id="card-ext-1",
+            name="Connected Card",
+            type="credit_card",
+            balance=Decimal("300.00"),
+            currency="BRL",
+        )
+    )
+    await session.commit()
+
+    handler = REGISTRY["list_accounts"].handler
+    r = await handler(session=session, ctx=ctx)
+    balances = {item["name"]: item["balance"] for item in r["items"]}
+    assert balances["Manual"] == pytest.approx(130.00)
+    # A connected account reports what the bank sent, as before.
+    assert balances["Conta Corrente"] == pytest.approx(1500.00)
+    # A card is debt, so it comes back negative, as on the Accounts page.
+    assert balances["Connected Card"] == pytest.approx(-300.00)
 
 
 async def test_list_assets_empty(session: AsyncSession, ctx: CallContext):
@@ -260,6 +376,54 @@ async def test_aggregate_currency_filter(
     assert "error" not in usd
     eur = await handler(session=session, ctx=ctx, currency="EUR", group_by="category")
     assert "error" not in eur and eur["items"] == []
+
+
+async def test_aggregate_exclude_transfers_drops_treat_as_transfer_categories(
+    session: AsyncSession, ctx: CallContext, test_user, test_account
+):
+    """exclude_transfers leaves out rows in a treat_as_transfer category, not
+    only paired legs, and still keeps uncategorized rows (#1342)."""
+    from datetime import date, datetime, timezone
+    from decimal import Decimal
+
+    from app.models.category import Category
+    from app.models.transaction import Transaction
+
+    investing = Category(
+        id=uuid.uuid4(), user_id=test_user.id, name="Investing",
+        icon="tag", color="#000", is_system=False, treat_as_transfer=True,
+    )
+    groceries = Category(
+        id=uuid.uuid4(), user_id=test_user.id, name="Groceries",
+        icon="tag", color="#000", is_system=False,
+    )
+    session.add_all([investing, groceries])
+    await session.commit()
+
+    def tx(amount: str, category_id=None, transfer_pair_id=None) -> Transaction:
+        return Transaction(
+            id=uuid.uuid4(), user_id=test_user.id, account_id=test_account.id,
+            category_id=category_id, transfer_pair_id=transfer_pair_id,
+            description="row", amount=Decimal(amount), date=date(2026, 3, 10),
+            type="debit", source="manual", created_at=datetime.now(timezone.utc),
+        )
+
+    session.add_all([
+        tx("500", investing.id),  # unpaired, in a treat_as_transfer category
+        tx("40", groceries.id),
+        tx("15"),  # uncategorized
+        tx("200", transfer_pair_id=uuid.uuid4()),  # paired leg
+    ])
+    await session.commit()
+
+    handler = REGISTRY["aggregate"].handler
+    period = {"from_date": "2026-03-01", "to_date": "2026-03-31", "group_by": "account"}
+
+    excluded = await handler(session=session, ctx=ctx, exclude_transfers=True, **period)
+    assert [(i["value"], i["count"]) for i in excluded["items"]] == [(55.0, 2)]
+
+    included = await handler(session=session, ctx=ctx, exclude_transfers=False, **period)
+    assert [(i["value"], i["count"]) for i in included["items"]] == [(755.0, 4)]
 
 
 async def test_list_transactions_account_types_filter(
@@ -420,6 +584,16 @@ async def test_propose_create_category_no_collision(
     assert result["proposed"]["name"] == "UniqueNewCategoryX9Z"
 
 
+async def test_propose_create_category_wildcard_name_is_no_collision(
+    session: AsyncSession, ctx: CallContext, test_categories
+):
+    handler = REGISTRY["propose_create_category"].handler
+    # Unescaped, `%` would match every category and `_` any one character.
+    for name in ("%", "_" * len(test_categories[0].name)):
+        result = await handler(session=session, ctx=ctx, name=name)
+        assert result["name_collision"] is None, name
+
+
 async def test_propose_create_budget(
     session: AsyncSession, ctx: CallContext, test_categories
 ):
@@ -434,6 +608,32 @@ async def test_propose_create_budget(
     assert result["kind"] == "create_budget"
     assert result["proposed"]["amount"] == 500.0
     assert result["proposed"]["month"] == "2026-05-01"  # snapped to month start
+
+
+async def test_propose_create_budget_refuses_a_limit_out_of_the_column(
+    session: AsyncSession, ctx: CallContext, test_categories
+):
+    """The preview answers what the save would, instead of proposing an amount
+    the POST then rejects (issue #406)."""
+    handler = REGISTRY["propose_create_budget"].handler
+
+    too_large = await handler(
+        session=session, ctx=ctx,
+        category_id=str(test_categories[0].id),
+        month="2026-05-15",
+        amount=1e13,
+        currency="BRL",
+    )
+    too_small = await handler(
+        session=session, ctx=ctx,
+        category_id=str(test_categories[0].id),
+        month="2026-05-15",
+        amount=0.005,
+        currency="BRL",
+    )
+
+    assert too_large == {"error": "The budget limit is too large"}
+    assert too_small == {"error": "The budget limit must be at least 0.01"}
 
 
 async def test_propose_create_transaction_full(

@@ -7,9 +7,32 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.group import GroupMember
 from app.services import transaction_service
+from app.services._query_filters import reporting_date_value
 from mcp_server.auth import CallContext
-from mcp_server.registry import tool
+from mcp_server.registry import ToolInputError, tool
 from mcp_server.tools._helpers import num, parse_date, parse_uuid, parse_uuid_list, resolve_workspace_id
+
+
+_STATUS_ALIASES = {"all": None, "any": None, "both": None, "": None, "posted": "posted", "pending": "pending"}
+_TX_TYPE_ALIASES = {"debit": "debit", "expense": "debit", "credit": "credit", "income": "credit", "": None}
+
+
+def _normalize_status(status: str | None) -> str | None:
+    if status is None:
+        return None
+    key = status.strip().lower()
+    if key not in _STATUS_ALIASES:
+        raise ToolInputError("status must be one of: posted, pending, all")
+    return _STATUS_ALIASES[key]
+
+
+def _normalize_tx_type(tx_type: str | None) -> str | None:
+    if tx_type is None:
+        return None
+    key = tx_type.strip().lower()
+    if key not in _TX_TYPE_ALIASES:
+        raise ToolInputError("tx_type must be one of: debit, credit, expense, income")
+    return _TX_TYPE_ALIASES[key]
 
 
 @tool(
@@ -32,7 +55,14 @@ from mcp_server.tools._helpers import num, parse_date, parse_uuid, parse_uuid_li
         "`list_groups`, and `splits.members[]` shows each "
         "{member_id, member_name, is_self, share_amount, share_type, "
         "share_pct}. So 'is this transaction split?' is just `splits != "
-        "null`; no extra tool call needed."
+        "null`; no extra tool call needed. Separately, `category_lines` is "
+        "non-null when ONE transaction's amount is divided across several "
+        "categories (e.g. a supermarket receipt: 120 groceries + 80 "
+        "household): its `category_id` is then null on purpose, it is NOT "
+        "uncategorized, and each part is {category_id, category_name, "
+        "amount, share_pct}. Reports count each part in its own category. "
+        "Filtering by a category returns a split row when any part matches, "
+        "and `matched_amount` is the part inside that filter."
     ),
     parameters={
         "type": "object",
@@ -63,8 +93,12 @@ from mcp_server.tools._helpers import num, parse_date, parse_uuid, parse_uuid_li
                 "exclusiveMinimum": 0,
                 "description": "Maximum absolute amount (primary-currency view).",
             },
-            "tx_type": {"type": "string", "enum": ["debit", "credit"], "description": "debit = expense, credit = income"},
-            "status": {"type": "string", "enum": ["posted", "pending"], "description": "Filter by posting status: posted = settled, pending = not yet settled."},
+            "tx_type": {
+                "type": "string",
+                "enum": ["debit", "credit", "expense", "income"],
+                "description": "debit (or expense) = money out, credit (or income) = money in.",
+            },
+            "status": {"type": "string", "enum": ["posted", "pending", "all"], "description": "Filter by posting status: posted = settled, pending = not yet settled, all (or omitted) = both."},
             "uncategorized": {"type": "boolean", "default": False, "description": "Only transactions without a category"},
             "exclude_transfers": {"type": "boolean", "default": False, "description": "Exclude transfers between user's own accounts"},
             "tags": {"type": "array", "items": {"type": "string"}, "description": "Match any of these tags"},
@@ -83,7 +117,7 @@ from mcp_server.tools._helpers import num, parse_date, parse_uuid, parse_uuid_li
             "sort_dir": {"type": "string", "enum": ["desc", "asc"], "default": "desc"},
             "accounting_mode": {
                 "type": "string",
-                "enum": ["cash", "accrual"],
+                "enum": ["purchase_date", "invoice_due_date"],
                 "description": "Override the global accounting mode for this query. Affects how credit-card transactions are bucketed by date.",
             },
             "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 25, "description": "Max rows per page. Capped at 50 — bigger pages blow up token budgets on small models. Use `total` for counts and pagination via `page` to walk longer lists."},
@@ -122,6 +156,13 @@ async def list_transactions(
     # Hard cap regardless of what the LLM asks — the schema says 50 but
     # not every provider enforces additionalProperties / maximum.
     limit = max(1, min(int(limit), 50))
+    # Nor does every provider hold the model to the enums. A value the filter
+    # does not know used to match nothing, and an empty list for a busy week
+    # sent the model retrying until it ran out of tool calls. The words the
+    # aggregate tool uses are read the same way here; anything else is refused
+    # with the values that work, so the model can correct itself.
+    status = _normalize_status(status)
+    tx_type = _normalize_tx_type(tx_type)
     ws_id = await resolve_workspace_id(session, ctx)
     txs, total, _ = await transaction_service.get_transactions(
         session,
@@ -164,6 +205,19 @@ async def list_transactions(
         )).scalars().all()
         member_lookup = {m.id: m for m in rows}
 
+    def _category_lines_summary(t: Any) -> list[dict[str, Any]] | None:
+        if not getattr(t, "has_category_lines", False):
+            return None
+        return [
+            {
+                "category_id": str(line.category_id),
+                "category_name": line.category.name if line.category else None,
+                "amount": num(line.amount),
+                "share_pct": num(line.share_pct),
+            }
+            for line in sorted(t.category_lines, key=lambda line: line.position)
+        ]
+
     def _splits_summary(t: Any) -> dict[str, Any] | None:
         splits = getattr(t, "splits", None) or []
         if not splits:
@@ -197,6 +251,10 @@ async def list_transactions(
             "id": str(t.id),
             "date": t.date.isoformat() if t.date else None,
             "effective_date": t.effective_date.isoformat() if getattr(t, "effective_date", None) else None,
+            "reporting_date": reporting_date_value(t, accounting_mode or "purchase_date").isoformat(),
+            "reporting_date_override": (
+                t.reporting_date_override.isoformat() if t.reporting_date_override else None
+            ),
             "description": t.description,
             "amount": num(t.amount),
             "currency": t.currency,
@@ -213,6 +271,8 @@ async def list_transactions(
             "is_transfer": bool(getattr(t, "transfer_pair_id", None)),
             "notes": getattr(t, "notes", None),
             "splits": _splits_summary(t),
+            "category_lines": _category_lines_summary(t),
+            "matched_amount": num(getattr(t, "matched_amount", None)),
         }
         for t in txs
     ]

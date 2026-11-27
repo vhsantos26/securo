@@ -8,9 +8,12 @@ import {
   Calendar as CalendarIcon,
   Check,
   ChevronRight,
+  CircleDashed,
   Coins,
   CreditCard,
   EyeClosed,
+  Flag,
+  Inbox,
   ListChecks,
   ListFilter,
   Search,
@@ -42,6 +45,7 @@ import {
 import { Calendar } from '@/components/ui/calendar'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import type { FlagFilter } from '@/lib/transaction-flag'
 import { localDateString } from '@/lib/date-utils'
 import { formatDateRange } from '@/lib/date-range-format'
 import { resolveDateFnsLocale } from '@/lib/date-fns-locale'
@@ -74,8 +78,17 @@ interface TransactionsFilterBarProps {
   onTypeChange: (value: string) => void
   filterStatus: string
   onStatusChange: (value: string) => void
+  /** Only the rows still waiting to be paid (issue #15). */
+  filterUnpaid: boolean
+  onUnpaidChange: (value: boolean) => void
   hideIgnored: boolean
   onHideIgnoredChange: (value: boolean) => void
+  filterFlag: FlagFilter
+  onFlagFilterChange: (value: FlagFilter) => void
+  onlyUnread: boolean
+  onOnlyUnreadChange: (value: boolean) => void
+  /** Offer the review-queue control at all; the calendar view passes false. */
+  showUnreadFilter?: boolean
   filterFrom: string
   filterTo: string
   onDateRangeChange: (from: string, to: string) => void
@@ -120,8 +133,15 @@ export function TransactionsFilterBar({
   onTypeChange,
   filterStatus,
   onStatusChange,
+  filterUnpaid,
+  onUnpaidChange,
   hideIgnored,
   onHideIgnoredChange,
+  filterFlag,
+  onFlagFilterChange,
+  onlyUnread,
+  onOnlyUnreadChange,
+  showUnreadFilter = true,
   filterFrom,
   filterTo,
   onDateRangeChange,
@@ -245,7 +265,10 @@ export function TransactionsFilterBar({
     !!filterGroupId ||
     !!filterType ||
     !!filterStatus ||
+    filterUnpaid ||
     hideIgnored ||
+    !!filterFlag ||
+    (showUnreadFilter && onlyUnread) ||
     !!filterFrom ||
     !!filterTo ||
     !!filterMinAmount ||
@@ -260,6 +283,16 @@ export function TransactionsFilterBar({
         : filterType === 'transfer'
           ? t('transactions.transfer')
           : ''
+
+  const flagOptions: { value: FlagFilter; label: string }[] = [
+    { value: '', label: t('transactions.all') },
+    { value: 'all', label: t('transactions.flagFilterAll') },
+    { value: 'overdue', label: t('transactions.flagFilterOverdue') },
+    { value: 'soon', label: t('transactions.flagFilterSoon') },
+  ]
+  const flagLabel = filterFlag
+    ? flagOptions.find((opt) => opt.value === filterFlag)?.label ?? ''
+    : ''
 
   const statusLabel =
     filterStatus === 'pending'
@@ -416,7 +449,7 @@ export function TransactionsFilterBar({
         />
 
         {/* Right-side controls */}
-        <div className="ml-auto flex shrink-0 items-center gap-1 pl-1">
+        <div className="ms-auto flex shrink-0 items-center gap-1 ps-1">
           {hasAnyFilter && (
             <button
               type="button"
@@ -484,6 +517,9 @@ export function TransactionsFilterBar({
                   type: typeLabel,
                   status: statusLabel,
                   ignored: hideIgnored ? t('transactions.ignoredHide') : undefined,
+                  flagged: flagLabel || undefined,
+                  unpaid: filterUnpaid ? t('transactions.onlyUnpaid') : undefined,
+                  unread: onlyUnread ? t('transactions.onlyUnreadShort') : undefined,
                   date: dateLabel,
                   amount: amountLabel,
                 }}
@@ -500,6 +536,14 @@ export function TransactionsFilterBar({
                 onStatusChange={onStatusChange}
                 hideIgnored={hideIgnored}
                 onHideIgnoredChange={onHideIgnoredChange}
+                filterUnpaid={filterUnpaid}
+                onUnpaidChange={onUnpaidChange}
+                flagFilter={filterFlag}
+                flagOptions={flagOptions}
+                onFlagFilterChange={onFlagFilterChange}
+                onlyUnread={onlyUnread}
+                onOnlyUnreadChange={onOnlyUnreadChange}
+                showUnread={showUnreadFilter}
                 onDateRangeChange={onDateRangeChange}
                 onAmountRangeChange={onAmountRangeChange}
                 onApplyAmountRange={applyAmountRange}
@@ -542,7 +586,7 @@ export function TransactionsFilterBar({
                               filterAccountIds.length === 0 && 'bg-primary/5',
                             )}
                           >
-                            <span className="min-w-0 flex-1 truncate text-left">
+                            <span className="min-w-0 flex-1 truncate text-start">
                               {t('transactions.all')}
                             </span>
                             {filterAccountIds.length === 0 && <Check size={13} className="text-primary" />}
@@ -568,7 +612,7 @@ export function TransactionsFilterBar({
                                 checked && 'bg-primary/5',
                               )}
                             >
-                              <span className="min-w-0 flex-1 truncate text-left">
+                              <span className="min-w-0 flex-1 truncate text-start">
                                 {getAccountName(a)}
                               </span>
                               {a.currency && (
@@ -594,7 +638,7 @@ export function TransactionsFilterBar({
                             }}
                             className="gap-2 rounded-sm py-1.5 text-[13px]"
                           >
-                            <span className="min-w-0 flex-1 truncate text-left">
+                            <span className="min-w-0 flex-1 truncate text-start">
                               {getAccountName(a)}
                             </span>
                             {a.currency && (
@@ -747,7 +791,7 @@ export function TransactionsFilterBar({
                         )}
                       >
                         <span className="size-2.5 shrink-0" />
-                        <span className="min-w-0 flex-1 truncate text-left">
+                        <span className="min-w-0 flex-1 truncate text-start">
                           {t('transactions.all')}
                         </span>
                         {!filterPayee && <Check size={13} className="text-primary" />}
@@ -768,7 +812,7 @@ export function TransactionsFilterBar({
                             )}
                           >
                             <span className="size-2.5 shrink-0" />
-                            <span className="min-w-0 flex-1 truncate text-left">
+                            <span className="min-w-0 flex-1 truncate text-start">
                               {p.name}
                             </span>
                             {filterPayee === p.id && (
@@ -805,7 +849,7 @@ export function TransactionsFilterBar({
                         )}
                       >
                         <span className="size-2.5 shrink-0" />
-                        <span className="min-w-0 flex-1 truncate text-left">
+                        <span className="min-w-0 flex-1 truncate text-start">
                           {t('transactions.all')}
                         </span>
                         {!filterGroupId && <Check size={13} className="text-primary" />}
@@ -826,7 +870,7 @@ export function TransactionsFilterBar({
                             )}
                           >
                             <span className="size-2.5 shrink-0" />
-                            <span className="min-w-0 flex-1 truncate text-left">
+                            <span className="min-w-0 flex-1 truncate text-start">
                               {g.name}
                             </span>
                             {filterGroupId === g.id && (
@@ -870,7 +914,7 @@ export function TransactionsFilterBar({
                           )}
                         >
                           <span className="size-2.5 shrink-0" />
-                          <span className="min-w-0 flex-1 truncate text-left">
+                          <span className="min-w-0 flex-1 truncate text-start">
                             {opt.label}
                           </span>
                           {filterType === opt.value && (
@@ -912,7 +956,7 @@ export function TransactionsFilterBar({
                           )}
                         >
                           <span className="size-2.5 shrink-0" />
-                          <span className="min-w-0 flex-1 truncate text-left">
+                          <span className="min-w-0 flex-1 truncate text-start">
                             {opt.label}
                           </span>
                           {filterStatus === opt.value && (
@@ -923,6 +967,20 @@ export function TransactionsFilterBar({
                     </DropdownMenuSubContent>
                   </DropdownMenuPortal>
                 </DropdownMenuSub>
+
+                {/* Rows still waiting to be paid (issue #15): a switch, like
+                    hiding ignored rows. */}
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault()
+                    onUnpaidChange(!filterUnpaid)
+                  }}
+                  className="gap-2 text-[13px]"
+                >
+                  <CircleDashed size={14} className="text-muted-foreground" />
+                  <span className="flex-1">{t('transactions.onlyUnpaid')}</span>
+                  {filterUnpaid && <Check size={13} className="text-primary" />}
+                </DropdownMenuItem>
 
                 {/* Ignored rows: a visibility switch rather than a filter
                     value, so it reads as one line instead of a submenu. */}
@@ -937,6 +995,61 @@ export function TransactionsFilterBar({
                   <span className="flex-1">{t('transactions.hideIgnored')}</span>
                   {hideIgnored && <Check size={13} className="text-primary" />}
                 </DropdownMenuItem>
+
+                {/* Flagged rows, optionally by reminder date */}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="gap-2 text-[13px]">
+                    <Flag size={14} className="text-muted-foreground" />
+                    <span className="flex-1">{t('transactions.flagged')}</span>
+                    {flagLabel && (
+                      <span className="max-w-[90px] truncate text-[11px] text-muted-foreground">
+                        {flagLabel}
+                      </span>
+                    )}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuPortal>
+                    <DropdownMenuSubContent
+                      sideOffset={8}
+                      className="w-[220px] p-1"
+                    >
+                      {flagOptions.map((opt) => (
+                        <DropdownMenuItem
+                          key={opt.value || 'any'}
+                          onSelect={() => onFlagFilterChange(opt.value)}
+                          className={cn(
+                            'gap-2 rounded-sm px-2 py-1.5 text-[13px]',
+                            filterFlag === opt.value && 'bg-primary/5',
+                          )}
+                        >
+                          <span className="size-2.5 shrink-0" />
+                          <span className="min-w-0 flex-1 truncate text-start">
+                            {opt.label}
+                          </span>
+                          {filterFlag === opt.value && (
+                            <Check size={13} className="text-primary" />
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuPortal>
+                </DropdownMenuSub>
+
+                {/* Review queue of issue #636: same shape as the ignored
+                    switch, a reading mode rather than a filter value. The
+                    calendar view does not apply it, so it does not offer it. */}
+                {showUnreadFilter && (
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault()
+                      onOnlyUnreadChange(!onlyUnread)
+                    }}
+                    className="gap-2 text-[13px]"
+                  >
+                    <Inbox size={14} className="text-muted-foreground" />
+                    <span className="flex-1">{t('transactions.onlyUnread')}</span>
+                    {onlyUnread && <Check size={13} className="text-primary" />}
+                  </DropdownMenuItem>
+                )}
 
                 {/* Date range submenu with presets */}
                 <DropdownMenuSub>
@@ -964,7 +1077,7 @@ export function TransactionsFilterBar({
                         )}
                       >
                         <span className="size-2.5 shrink-0" />
-                        <span className="min-w-0 flex-1 truncate text-left">
+                        <span className="min-w-0 flex-1 truncate text-start">
                           {t('transactions.all')}
                         </span>
                         {!filterFrom && !filterTo && (
@@ -987,7 +1100,7 @@ export function TransactionsFilterBar({
                             )}
                           >
                             <span className="size-2.5 shrink-0" />
-                            <span className="min-w-0 flex-1 truncate text-left">
+                            <span className="min-w-0 flex-1 truncate text-start">
                               {preset.label}
                             </span>
                             {active && <Check size={13} className="text-primary" />}
@@ -1134,6 +1247,10 @@ export function TransactionsFilterBar({
           !!selectedPayee ||
           !!typeLabel ||
           !!statusLabel ||
+          filterUnpaid ||
+          hideIgnored ||
+          !!flagLabel ||
+          (showUnreadFilter && onlyUnread) ||
           !!dateLabel ||
           !!amountLabel) && (
           <div className="flex flex-wrap items-center gap-1 border-t border-border/60 px-2 py-1.5">
@@ -1219,12 +1336,36 @@ export function TransactionsFilterBar({
                 onRemove={() => onStatusChange('')}
               />
             )}
+            {filterUnpaid && (
+              <FilterChip
+                icon={<CircleDashed size={12} />}
+                label={t('transactions.onlyUnpaid')}
+                value={t('transactions.unpaid')}
+                onRemove={() => onUnpaidChange(false)}
+              />
+            )}
             {hideIgnored && (
               <FilterChip
                 icon={<EyeClosed size={12} />}
                 label={t('transactions.hideIgnored')}
                 value={t('transactions.ignoredHiddenValue')}
                 onRemove={() => onHideIgnoredChange(false)}
+              />
+            )}
+            {flagLabel && (
+              <FilterChip
+                icon={<Flag size={12} />}
+                label={t('transactions.flagged')}
+                value={flagLabel}
+                onRemove={() => onFlagFilterChange('')}
+              />
+            )}
+            {showUnreadFilter && onlyUnread && (
+              <FilterChip
+                icon={<Inbox size={12} />}
+                label={t('transactions.unreadRows')}
+                value={t('transactions.onlyUnreadShort')}
+                onRemove={() => onOnlyUnreadChange(false)}
               />
             )}
             {dateLabel && (
@@ -1266,7 +1407,7 @@ export function TransactionsFilterBar({
             </p>
           </div>
           <div className="flex flex-col gap-4 p-3 sm:flex-row sm:gap-0">
-            <div className="sm:border-r sm:border-border/60 sm:pr-2">
+            <div className="sm:border-e sm:border-border/60 sm:pe-2">
               <p className="px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
                 {t('transactions.filtersBar.fromLabel')}
               </p>
@@ -1279,7 +1420,7 @@ export function TransactionsFilterBar({
                 onSelect={(d) => setDraftFrom(d ? localDateString(d) : '')}
               />
             </div>
-            <div className="sm:pl-2">
+            <div className="sm:ps-2">
               <p className="px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
                 {t('transactions.filtersBar.toLabel')}
               </p>
@@ -1356,7 +1497,7 @@ function FilterChip({ icon, label, value, tint, onRemove }: FilterChipProps) {
     <button
       type="button"
       onClick={onRemove}
-      className="group inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-border/80 bg-muted/50 pl-2 pr-1.5 text-[11.5px] text-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/5"
+      className="group inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-border/80 bg-muted/50 ps-2 pe-1.5 text-[11.5px] text-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/5"
       style={tint ? { borderColor: `${tint}55`, backgroundColor: `${tint}12` } : undefined}
     >
       <span
@@ -1369,7 +1510,7 @@ function FilterChip({ icon, label, value, tint, onRemove }: FilterChipProps) {
       <span className="max-w-[140px] truncate font-medium text-foreground">
         {value}
       </span>
-      <span className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground/70 group-hover:text-destructive">
+      <span className="ms-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground/70 group-hover:text-destructive">
         <X size={11} />
       </span>
     </button>
