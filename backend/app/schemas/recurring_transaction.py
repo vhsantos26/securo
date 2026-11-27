@@ -3,7 +3,13 @@ from datetime import date as _Date
 from decimal import Decimal
 from typing import Annotated, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.core.money import bounded_money
+from app.schemas.transaction_category_line import (
+    TransactionCategoryLineRead,
+    TransactionCategoryLinesInput,
+)
 
 WeekendAdjustment = Literal["none", "previous_friday", "next_monday"]
 RecurringFrequency = Literal["weekly", "biweekly", "monthly", "quarterly", "semiannual", "yearly"]
@@ -24,6 +30,17 @@ class RecurringTransactionCreate(BaseModel):
     category_id: Optional[uuid.UUID] = None
     skip_first: bool = False  # Set true when first occurrence already created as a transaction
     auto_generate: bool = True  # Materialize occurrences; when false, wait for the real charge
+    # The existing transaction this bill is made from. It is linked to the new
+    # bill, so it stops offering "make recurring" and counts as the first
+    # occurrence the series already has.
+    source_transaction_id: Optional[uuid.UUID] = None
+    # Split across categories; every occurrence starts with these parts.
+    category_lines: Optional[TransactionCategoryLinesInput] = None
+
+    @field_validator("amount")
+    @classmethod
+    def check_amount_bounds(cls, value: Decimal) -> Decimal:
+        return bounded_money(value)
 
 
 class RecurringTransactionUpdate(BaseModel):
@@ -40,6 +57,15 @@ class RecurringTransactionUpdate(BaseModel):
     category_id: Optional[uuid.UUID] = None
     is_active: Optional[bool] = None
     auto_generate: Optional[bool] = None
+    category_lines: Optional[TransactionCategoryLinesInput] = None
+
+    @field_validator("amount")
+    @classmethod
+    def check_amount_bounds(cls, value: Optional[Decimal]) -> Decimal:
+        # The column is NOT NULL; left out, the amount is not changed.
+        if value is None:
+            raise ValueError("amount cannot be null")
+        return bounded_money(value)
 
 
 class RecurringTransactionRead(BaseModel):
@@ -61,5 +87,22 @@ class RecurringTransactionRead(BaseModel):
     next_occurrence: _Date
     amount_primary: Optional[float] = None
     fx_rate_used: Optional[float] = None
+    has_category_lines: bool = False
+    category_lines: list[TransactionCategoryLineRead] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class RecurringMonthSummary(BaseModel):
+    """What the active recurring definitions add up to in one month, in the
+    primary currency, counting each occurrence that falls in it."""
+
+    month: _Date
+    currency: str
+    income: Decimal
+    expenses: Decimal
+    net: Decimal
+    # Occurrences of transfer-like categories, kept out of the totals.
+    transfer_count: int
+    # Occurrences left out because no exchange rate could be found.
+    unconverted_count: int

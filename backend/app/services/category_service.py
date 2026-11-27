@@ -1,6 +1,6 @@
 import uuid
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from itertools import groupby
 from typing import Optional
 
@@ -8,12 +8,16 @@ from sqlalchemy import func, or_, select, update as sa_update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.app_clock import app_today
+from app.models.account import Account
 from app.models.budget import Budget
 from app.models.category import Category
 from app.models.category_group import CategoryGroup
 from app.models.recurring_transaction import RecurringTransaction
 from app.models.rule import Rule
 from app.models.transaction import Transaction
+from app.models.recurring_transaction_category_line import RecurringTransactionCategoryLine
+from app.models.transaction_category_line import TransactionCategoryLine
 from app.schemas.category import CategoryCreate, CategoryUpdate
 from app.services.category_defaults import (
     CATEGORY_TO_GROUP,
@@ -21,6 +25,7 @@ from app.services.category_defaults import (
     localized_name,
 )
 from app.services.category_group_service import create_default_groups
+from app.services.fx_rate_service import convert_or_none
 
 
 class CategoryVisibilityError(ValueError):
@@ -33,6 +38,10 @@ class CategoryInUseError(ValueError):
 
 class CategoryTransferError(ValueError):
     """Raised when the destination given for a deletion cannot take the references."""
+
+
+class CategoryGroupNotFoundError(ValueError):
+    """Raised when a category points at a group outside the workspace."""
 
 
 async def create_default_categories(
@@ -146,12 +155,35 @@ async def get_category(
     return result.scalar_one_or_none()
 
 
+async def _ensure_group_in_workspace(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    group_id: Optional[uuid.UUID],
+) -> None:
+    """Refuse a group that is missing or belongs to another workspace.
+
+    Both cases answer the same, so the response never tells a caller whether
+    an id exists somewhere else.
+    """
+    if group_id is None:
+        return
+    result = await session.execute(
+        select(CategoryGroup.id).where(
+            CategoryGroup.id == group_id,
+            CategoryGroup.workspace_id == workspace_id,
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise CategoryGroupNotFoundError("Category group not found")
+
+
 async def create_category(
     session: AsyncSession,
     workspace_id: uuid.UUID,
     user_id: uuid.UUID,
     data: CategoryCreate,
 ) -> Category:
+    await _ensure_group_in_workspace(session, workspace_id, data.group_id)
     category = Category(user_id=user_id, workspace_id=workspace_id, **data.model_dump())
     session.add(category)
     await session.commit()
@@ -222,8 +254,27 @@ async def update_category(
         return None
 
     changes = data.model_dump(exclude_unset=True)
+    if "group_id" in changes:
+        await _ensure_group_in_workspace(session, workspace_id, changes["group_id"])
     if changes.get("is_hidden") is True and not category.is_system:
         raise CategoryVisibilityError("Only system categories can be hidden")
+    if (
+        (changes.get("is_hidden") is True and not category.is_hidden)
+        or (changes.get("is_ignored") is True and not category.is_ignored)
+    ) and await _used_in_category_lines(session, workspace_id, category_id):
+        # An ignored category takes a row out of the balance, and a split row
+        # stays in the balance as a whole; a hidden one cannot be picked.
+        raise CategoryVisibilityError(
+            "This category is used in transactions split across categories. "
+            "Change those splits first."
+        )
+
+    if (
+        changes.get("treat_as_transfer") is True
+        and not category.treat_as_transfer
+        and await _used_in_card_credit_lines(session, workspace_id, category_id)
+    ):
+        raise CategoryVisibilityError(_CARD_CREDIT_TRANSFER)
 
     for key, value in changes.items():
         setattr(category, key, value)
@@ -280,13 +331,90 @@ async def get_category_usage(
         )
         counts[key] = int(result.scalar_one())
 
+    # A transaction split across categories references them through its
+    # lines; count each such transaction once.
+    split_count = await session.scalar(
+        select(func.count(func.distinct(TransactionCategoryLine.transaction_id))).where(
+            TransactionCategoryLine.workspace_id == workspace_id,
+            TransactionCategoryLine.category_id == category_id,
+        )
+    )
+    counts["transactions"] += int(split_count or 0)
+    # Likewise a recurring bill split across categories.
+    split_recurring = await session.scalar(
+        select(
+            func.count(func.distinct(RecurringTransactionCategoryLine.recurring_transaction_id))
+        ).where(
+            RecurringTransactionCategoryLine.workspace_id == workspace_id,
+            RecurringTransactionCategoryLine.category_id == category_id,
+        )
+    )
+    counts["recurring_transactions"] += int(split_recurring or 0)
+
     rules = await get_rules_assigning_category(
         session, workspace_id, category_id, include_inactive=True
     )
     return CategoryUsage(**counts, rules=rules)
 
 
-_Limit = tuple[Decimal, Decimal | None]
+async def _used_in_category_lines(
+    session: AsyncSession, workspace_id: uuid.UUID, category_id: uuid.UUID
+) -> bool:
+    """A part of a split transaction or of a split recurring bill uses it."""
+    for model in (TransactionCategoryLine, RecurringTransactionCategoryLine):
+        found = await session.scalar(
+            select(model.id)
+            .where(model.workspace_id == workspace_id, model.category_id == category_id)
+            .limit(1)
+        )
+        if found is not None:
+            return True
+    return False
+
+
+_CARD_CREDIT_TRANSFER = "A credit on a credit card cannot have a line in a transfer category"
+
+
+async def _used_in_card_credit_lines(
+    session: AsyncSession, workspace_id: uuid.UUID, category_id: uuid.UUID
+) -> bool:
+    """A part of a credit on a credit card (or of a template for one) uses it.
+
+    A card statement drops a credit in a transfer-like category as a whole and
+    cannot drop only part of one, so such a part may never become transfer-like.
+    """
+    for line_model, owner_model, owner_fk in (
+        (TransactionCategoryLine, Transaction, TransactionCategoryLine.transaction_id),
+        (
+            RecurringTransactionCategoryLine,
+            RecurringTransaction,
+            RecurringTransactionCategoryLine.recurring_transaction_id,
+        ),
+    ):
+        found = await session.scalar(
+            select(line_model.id)
+            .join(owner_model, owner_model.id == owner_fk)
+            .join(Account, Account.id == owner_model.account_id)
+            .where(
+                line_model.workspace_id == workspace_id,
+                line_model.category_id == category_id,
+                owner_model.type == "credit",
+                Account.type == "credit_card",
+            )
+            .limit(1)
+        )
+        if found is not None:
+            return True
+    return False
+
+
+_MERGE_NEEDS_RATE = (
+    "These budgets are in different currencies and there is no exchange rate "
+    "for their month to combine them."
+)
+
+# (amount, amount_primary, currency) of one member's limit.
+_Limit = tuple[Decimal, Decimal | None, str | None]
 
 
 async def _merge_budgets(
@@ -335,12 +463,12 @@ async def _merge_budgets(
     # category's carried-over default) lands on a kept row, destination first.
     ordered = sorted([*moving, *existing], key=lambda b: (b.month, not b.is_recurring))
     recurring: dict[uuid.UUID, dict[uuid.UUID, _Limit]] = {}
-    for (_, is_recurring), slot in groupby(ordered, key=lambda b: (b.month, b.is_recurring)):
+    for (month, is_recurring), slot in groupby(ordered, key=lambda b: (b.month, b.is_recurring)):
         rows = list(slot)
         limits: dict[uuid.UUID, dict[uuid.UUID, _Limit]] = {}
         for budget in rows:
             limits.setdefault(budget.category_id, {})[budget.user_id] = (
-                budget.amount, budget.amount_primary,
+                budget.amount, budget.amount_primary, budget.currency,
             )
         if is_recurring:
             # Store immutable amounts before changing any ORM row. An
@@ -361,8 +489,31 @@ async def _merge_budgets(
 
         for user_id, target in kept.items():
             target.category_id = destination_id
-            target.amount = sum((amount for amount, _ in shares[user_id]), Decimal("0"))
-            primary = [value for _, value in shares[user_id] if value is not None]
+            # Limits keep the currency they were typed in, so each part is
+            # brought into the kept row's currency, at the slot's rate, before
+            # the sum: US$ 100 onto R$ 1,000 is R$ 1,500 at 5, not 1,100.
+            currency = target.currency or next(
+                (c for _, _, c in shares[user_id] if c), None
+            )
+            total = Decimal("0")
+            for amount, _, share_currency in shares[user_id]:
+                if not currency or not share_currency or share_currency == currency:
+                    total += amount
+                    continue
+                # A missing rate must stop the move: the 1:1 read fallback
+                # would store US$ 100 onto R$ 1,000 as 1,100. Stored rates
+                # only: the on-demand sync commits the session, which would
+                # keep the moves made so far even when the transfer is refused.
+                converted, _ = await convert_or_none(
+                    session, amount, share_currency, currency, min(month, app_today()),
+                    allow_fetch=False,
+                )
+                if converted is None:
+                    raise CategoryTransferError(_MERGE_NEEDS_RATE)
+                total += converted
+            target.amount = total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            target.currency = currency
+            primary = [value for _, value, _ in shares[user_id] if value is not None]
             target.amount_primary = (
                 sum(primary, Decimal("0")) if len(primary) == len(shares[user_id]) else None
             )
@@ -400,6 +551,78 @@ async def _repoint_rules(
         ]
 
 
+def _join_notes(*notes: Optional[str], limit: int) -> Optional[str]:
+    """Notes from parts that became one, each kept once, cut to the column."""
+    kept = [note.strip() for note in notes if note and note.strip()]
+    joined = "; ".join(dict.fromkeys(kept))
+    return joined[:limit] or None
+
+
+async def _move_category_lines(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    category_id: uuid.UUID,
+    destination_id: uuid.UUID,
+) -> None:
+    """Move the parts in one category to another, merging where they meet.
+
+    A split that already has a part in the destination gets the moved amount
+    (and its note) added to that part rather than a second part in the same
+    category, and a split left with a single part becomes a plain row in that
+    category. A transaction keeps that last part's note in its own notes; a
+    recurring bill has no notes of its own to keep it in.
+    """
+    for line_model, owner_model, owner_fk in (
+        (TransactionCategoryLine, Transaction, "transaction_id"),
+        (RecurringTransactionCategoryLine, RecurringTransaction, "recurring_transaction_id"),
+    ):
+        owner_col = getattr(line_model, owner_fk)
+        affected = select(owner_col).where(
+            line_model.workspace_id == workspace_id,
+            line_model.category_id == category_id,
+        )
+        lines = (
+            await session.scalars(
+                select(line_model)
+                .where(owner_col.in_(affected))
+                .order_by(owner_col, line_model.position)
+            )
+        ).all()
+        collapsed: dict[uuid.UUID, TransactionCategoryLine | RecurringTransactionCategoryLine] = {}
+        for owner_id, group in groupby(lines, key=lambda line: getattr(line, owner_fk)):
+            parts = list(group)
+            kept = next((line for line in parts if line.category_id == destination_id), None)
+            remaining = []
+            for line in parts:
+                if line.category_id not in (category_id, destination_id) or line is kept:
+                    remaining.append(line)
+                elif kept is None:
+                    line.category_id = destination_id
+                    kept = line
+                    remaining.append(line)
+                else:
+                    kept.amount += line.amount
+                    if kept.share_pct is not None and line.share_pct is not None:
+                        kept.share_pct += line.share_pct
+                    kept.notes = _join_notes(kept.notes, line.notes, limit=500)
+                    await session.delete(line)
+            if len(remaining) == 1:
+                collapsed[owner_id] = remaining[0]
+        if not collapsed:
+            continue
+        owners = (
+            await session.scalars(select(owner_model).where(owner_model.id.in_(collapsed)))
+        ).all()
+        for owner in owners:
+            last = collapsed[owner.id]
+            owner.category_id = last.category_id
+            owner.has_category_lines = False
+            if isinstance(owner, Transaction) and last.notes:
+                owner.notes = _join_notes(owner.notes, last.notes, limit=1000)
+            await session.delete(last)
+    await session.flush()
+
+
 async def _transfer_category_references(
     session: AsyncSession,
     workspace_id: uuid.UUID,
@@ -416,6 +639,7 @@ async def _transfer_category_references(
             )
             .values(category_id=destination_id)
         )
+    await _move_category_lines(session, workspace_id, category_id, destination_id)
     await _merge_budgets(session, workspace_id, category_id, destination_id)
     await _repoint_rules(session, workspace_id, category_id, destination_id)
 
@@ -444,6 +668,19 @@ async def delete_category(
         destination = await get_category(session, transfer_to_id, workspace_id)
         if not destination:
             raise CategoryTransferError("Destination category not found.")
+        if (destination.is_ignored or destination.is_hidden) and await _used_in_category_lines(
+            session, workspace_id, category_id
+        ):
+            raise CategoryTransferError(
+                "Transactions split across categories cannot move into an ignored "
+                "or hidden category."
+            )
+        if (
+            destination.treat_as_transfer
+            and not category.treat_as_transfer
+            and await _used_in_card_credit_lines(session, workspace_id, category_id)
+        ):
+            raise CategoryTransferError(_CARD_CREDIT_TRANSFER)
         await _transfer_category_references(
             session, workspace_id, category_id, transfer_to_id
         )

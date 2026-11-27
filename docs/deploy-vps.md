@@ -44,13 +44,19 @@ AGENTS_EXTERNAL_MCP_URL=https://financas.example.com/mcp
 Suba a stack:
 
 ```bash
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d --remove-orphans
-docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml -f docker-compose.vps.yml pull db redis
+docker compose -f docker-compose.prod.yml -f docker-compose.vps.yml build --pull backend frontend
+docker compose -f docker-compose.prod.yml -f docker-compose.vps.yml up -d --remove-orphans
+docker compose -f docker-compose.prod.yml -f docker-compose.vps.yml ps
 ```
 
+Use sempre os dois arquivos. Só com `docker-compose.prod.yml` a VPS subiria as
+imagens publicadas pelo upstream, cujas migrations têm outra numeração e
+corromperiam o banco deste fork.
+
 O arquivo de produção publica frontend, API e MCP apenas em `127.0.0.1` por
-padrão. Não defina `*_HOST_BIND=0.0.0.0` numa VPS pública.
+padrão. Não defina `BACKEND_BIND_ADDRESS=0.0.0.0` nem
+`FRONTEND_HOST_BIND=0.0.0.0` numa VPS pública.
 
 ## Caddy
 
@@ -125,8 +131,8 @@ Para uma atualização manual ou uma recuperação pontual:
 ```bash
 cd /opt/securo
 git pull --ff-only origin deploy
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d --remove-orphans
+docker compose -f docker-compose.prod.yml -f docker-compose.vps.yml build --pull backend frontend
+docker compose -f docker-compose.prod.yml -f docker-compose.vps.yml up -d --remove-orphans
 ```
 
 O banco, anexos e a base de conhecimento usam volumes Docker. Faça backup do

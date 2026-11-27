@@ -13,16 +13,19 @@ import uuid
 from datetime import datetime, timezone
 from typing import cast
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
+from pydantic import SecretStr
 from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.models.bank_connection import BankConnection
 from app.models.workspace_provider_credential import WorkspaceProviderCredential
 from app.providers import all_known_providers, get_provider
 from app.providers.base import ProviderNotConfiguredError
+from app.providers.credentials import is_configured
 from app.providers.pluggy import PluggyProvider
+from app.services.provider_settings import resolve_settings
 
 
 _SALT = b"securo-workspace-provider-credentials-v1"
@@ -38,20 +41,31 @@ class WorkspaceCredentialUnavailableError(ProviderNotConfiguredError):
     """
 
 
-@functools.lru_cache(maxsize=1)
-def _fernet() -> Fernet:
-    secret = get_settings().secret_key.get_secret_value().encode("utf-8")
-    raw = hashlib.pbkdf2_hmac("sha256", secret, _SALT, iterations=100_000, dklen=32)
-    return Fernet(base64.urlsafe_b64encode(raw))
+@functools.lru_cache(maxsize=4)
+def _fernet(keys: tuple[str, ...]) -> MultiFernet:
+    fernets = []
+    for secret in dict.fromkeys(keys):
+        raw = hashlib.pbkdf2_hmac(
+            "sha256", secret.encode("utf-8"), _SALT, iterations=100_000, dklen=32
+        )
+        fernets.append(Fernet(base64.urlsafe_b64encode(raw)))
+    return MultiFernet(fernets)
+
+
+def _keys() -> tuple[str, ...]:
+    # The instance may replace a missing or public SECRET_KEY with a stored one;
+    # values written under an earlier key must stay readable.
+    settings = get_settings()
+    return (settings.secret_key.get_secret_value(), *settings.secret_key_fallbacks)
 
 
 def _encrypt(value: str) -> str:
-    return _fernet().encrypt(value.encode("utf-8")).decode("ascii")
+    return _fernet(_keys()).encrypt(value.encode("utf-8")).decode("ascii")
 
 
 def _decrypt(value: str) -> str | None:
     try:
-        return _fernet().decrypt(value.encode("ascii")).decode("utf-8")
+        return _fernet(_keys()).decrypt(value.encode("ascii")).decode("utf-8")
     except (InvalidToken, ValueError):
         return None
 
@@ -60,9 +74,16 @@ def _client_id_hint(value: str) -> str:
     return f"…{value[-4:]}" if len(value) > 4 else "••••"
 
 
-def _environment_pluggy_configured() -> bool:
-    settings = get_settings()
-    return bool(settings.pluggy_client_id and settings.pluggy_client_secret.get_secret_value())
+def _instance_pluggy_configured(settings: Settings) -> bool:
+    """Instance-wide credentials, from the environment or saved by an admin."""
+    return is_configured("pluggy", settings)
+
+
+def _with_pluggy_credentials(base: Settings, client_id: str, client_secret: str) -> Settings:
+    settings = base.model_copy(deep=True)
+    settings.pluggy_client_id = client_id
+    settings.pluggy_client_secret = SecretStr(client_secret)
+    return settings
 
 
 async def get_active_credential(
@@ -110,7 +131,8 @@ async def save_pluggy_credential(
         raise ValueError("Pluggy Client ID and Client Secret are required")
 
     # Validate before persisting. Invalid secrets never enter the database.
-    await PluggyProvider(client_id=client_id, client_secret=client_secret).verify_credentials()
+    candidate = _with_pluggy_credentials(get_settings(), client_id, client_secret)
+    await PluggyProvider(settings=candidate).verify_credentials()
 
     await session.execute(
         update(WorkspaceProviderCredential)
@@ -146,11 +168,11 @@ async def resolve_provider(
     """Return an integration instance configured for this workspace.
 
     The explicit ID is used by existing connections; an active profile is used
-    for a new connect flow. Other providers keep their existing environment
-    configuration until they are migrated to this abstraction.
+    for a new connect flow. Other providers use the instance settings.
     """
+    instance = await resolve_settings(session)
     if provider != "pluggy":
-        return get_provider(provider), None
+        return get_provider(provider, settings=instance), None
 
     credential = (
         await get_credential(session, workspace_id, provider, credential_id)
@@ -172,10 +194,11 @@ async def resolve_provider(
                 "Pluggy credentials for this workspace can no longer be decrypted. "
                 "An owner must configure them again."
             )
-        return PluggyProvider(client_id=credential.client_id, client_secret=secret), credential
+        settings = _with_pluggy_credentials(instance, credential.client_id, secret)
+        return PluggyProvider(settings=settings), credential
 
-    if _environment_pluggy_configured():
-        return PluggyProvider(), None
+    if _instance_pluggy_configured(instance):
+        return PluggyProvider(settings=instance), None
     raise ProviderNotConfiguredError(
         "Pluggy is not configured for this workspace. Ask a workspace owner to configure it."
     )
@@ -201,12 +224,13 @@ async def integration_status(session: AsyncSession, workspace_id: uuid.UUID) -> 
             "updated_at": active.updated_at,
             "legacy_connection_count": legacy_count,
         }
-    if _environment_pluggy_configured():
+    instance = await resolve_settings(session)
+    if _instance_pluggy_configured(instance):
         return {
             "provider": "pluggy",
             "configured": True,
             "source": "environment",
-            "client_id_hint": _client_id_hint(get_settings().pluggy_client_id),
+            "client_id_hint": _client_id_hint(instance.pluggy_client_id),
             "active_credential_id": None,
             "updated_at": None,
             "legacy_connection_count": legacy_count,
@@ -223,8 +247,8 @@ async def integration_status(session: AsyncSession, workspace_id: uuid.UUID) -> 
 
 
 async def providers_for_workspace(session: AsyncSession, workspace_id: uuid.UUID) -> list[dict]:
-    """Overlay workspace Pluggy status on the legacy provider registry."""
-    out = all_known_providers()
+    """Overlay workspace Pluggy status on the instance-wide provider list."""
+    out = all_known_providers(await resolve_settings(session))
     status = await integration_status(session, workspace_id)
     for item in out:
         if item["name"] == "pluggy":

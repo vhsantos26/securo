@@ -33,6 +33,7 @@ import {
   type GroupSettlementPayload,
 } from '@/lib/api'
 import { localDateString } from '@/lib/date-utils'
+import { extractApiError } from '@/lib/api-errors'
 import { MemberForm } from '@/components/member-form'
 import { useAuth } from '@/contexts/auth-context'
 import { useWorkspace } from '@/contexts/workspace-context'
@@ -113,7 +114,7 @@ function KpiCard({
     <div className="bg-card rounded-xl border border-border shadow-sm p-3 sm:p-4">
       <button
         type="button"
-        className={`w-full text-left ${hasBreakdown ? 'cursor-pointer' : 'cursor-default'}`}
+        className={`w-full text-start ${hasBreakdown ? 'cursor-pointer' : 'cursor-default'}`}
         onClick={() => hasBreakdown && setOpen((o) => !o)}
         disabled={!hasBreakdown}
         aria-expanded={open}
@@ -152,6 +153,14 @@ function KpiCard({
   )
 }
 
+/** What group paybacks leave of a transaction to link. A credit they already
+ * cover up to its amount cannot take another one: the API refuses past it. */
+function linkableAmount(tx: Transaction): number {
+  const settled = (tx.settled_by ?? []).reduce((sum, s) => sum + Number(s.amount), 0)
+  // In cents: the subtraction must not leave float noise in what is shown or saved.
+  return Math.max(0, Math.round((Number(tx.amount) - settled) * 100) / 100)
+}
+
 export default function GroupDetailPage() {
   const { id } = useParams<{ id: string }>()
   const groupId = id ?? ''
@@ -171,15 +180,18 @@ export default function GroupDetailPage() {
 
   // Linked members get a read-only view of the group.
   const isOwner = group?.is_owner ?? false
-  // The member that represents the current viewer (when linked).
+  // The member that represents the current viewer. The server sets
+  // is_self per request: the member linked to the viewer, or the owner's
+  // own unlinked member when the viewer is the owner.
   const viewerMember = useMemo(
-    () => group?.members.find((m) => user && m.linked_user_id === user.id),
-    [group?.members, user],
-  )
-  // The "self" member is the owner-payer of the group's transactions.
-  const ownerMember = useMemo(
     () => group?.members.find((m) => m.is_self),
     [group?.members],
+  )
+  // The owner's member, when the owner is in the group under their account.
+  const ownerUserId = group?.user_id
+  const ownerMember = useMemo(
+    () => group?.members.find((m) => m.linked_user_id === ownerUserId),
+    [group?.members, ownerUserId],
   )
 
   const { data: balances } = useQuery({
@@ -326,13 +338,16 @@ export default function GroupDetailPage() {
     return () => clearTimeout(id)
   }, [settleTxSearch])
 
-  // The payer's debit transactions, searched server-side and capped —
-  // offered when linking an existing transaction instead of creating one.
+  // Transactions to link instead of creating one, searched server-side and
+  // capped: the payer's debits, or the credit that already arrived when the
+  // viewer is the one being paid.
+  const settleAsReceiver =
+    !!group?.is_owner && !!viewerMember && settleTo === viewerMember.id && settleFrom !== viewerMember.id
   const { data: settleTxOptions } = useQuery({
-    queryKey: ['settle-tx-options', settleTxQuery],
+    queryKey: ['settle-tx-options', settleTxQuery, settleAsReceiver],
     queryFn: () =>
       transactionsApi.list({
-        type: 'debit',
+        type: settleAsReceiver ? 'credit' : 'debit',
         q: settleTxQuery || undefined,
         limit: 20,
         sort_by: 'date',
@@ -340,6 +355,10 @@ export default function GroupDetailPage() {
       }),
     enabled: settleOpen && settleTxMode === 'existing',
   })
+  // A credit the group already paid back in full has nothing left to link.
+  const settleTxChoices = (settleTxOptions?.items ?? []).filter(
+    (tx) => linkableAmount(tx) > 0,
+  )
 
   const settlementMutation = useMutation({
     mutationFn: (payload: GroupSettlementPayload) =>
@@ -351,11 +370,8 @@ export default function GroupDetailPage() {
       toast.success(t('splitGroups.settled'))
     },
     onError: (err: unknown) => {
-      const detail =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-          : undefined
-      toast.error(detail ?? t('common.error'))
+      // The API answers in English; the toast follows the user's language.
+      toast.error(extractApiError(err, t('common.error')))
     },
   })
 
@@ -404,7 +420,7 @@ export default function GroupDetailPage() {
     if (settleTxMode === 'create' && settleAccountId) {
       payload.account_id = settleAccountId
     } else if (settleTxMode === 'existing' && settlePickedTx) {
-      payload.transaction_id = settlePickedTx.id
+      payload[settleAsReceiver ? 'receiver_transaction_id' : 'transaction_id'] = settlePickedTx.id
     }
     settlementMutation.mutate(payload)
   }
@@ -428,37 +444,41 @@ export default function GroupDetailPage() {
   const summaryReady = !!summary && !summaryFailed
   const totalMoved = Number(summary?.total_moved ?? 0)
 
-  // KPIs roll up across currencies using each line's
+  // Balance lines are already relative to the viewer: a positive amount
+  // means that member owes the viewer, a negative one that the viewer
+  // owes them. KPIs roll up across currencies using each line's
   // amount_in_default_currency (FX-converted server-side). Filtering by
   // a single currency would otherwise hide debts in another currency
   // — e.g. a EUR-only line wouldn't show up for a USD-default group.
-  const owedToViewer = useMemo(() => {
-    if (!balances) return 0
-    if (isOwner) {
-      return balances.lines
-        .filter((l) => l.amount > 0)
-        .reduce((s, l) => s + Number(l.amount_in_default_currency), 0)
-    }
-    if (!viewerMember) return 0
-    return balances.lines
-      .filter((l) => l.member_id === viewerMember.id && l.amount < 0)
-      .reduce((s, l) => s + Math.abs(Number(l.amount_in_default_currency)), 0)
-  }, [balances, isOwner, viewerMember])
+  //
+  // A viewer who is neither the owner nor in the group (a workspace
+  // member) has no member of their own. When the owner isn't a member
+  // either, the lines come back from the owner's side: they are the
+  // owner's debts, so they are shown in the third person and kept out of
+  // the viewer's KPIs.
+  const ownerSideLines = !isOwner && !!balances && !balances.self_member_id
+  const viewerLines = useMemo(
+    () => (balances && !ownerSideLines ? balances.lines : []),
+    [balances, ownerSideLines],
+  )
 
-  const viewerOwes = useMemo(() => {
-    if (!balances) return 0
-    if (isOwner) {
-      return Math.abs(
-        balances.lines
+  const owedToViewer = useMemo(
+    () =>
+      viewerLines
+        .filter((l) => l.amount > 0)
+        .reduce((s, l) => s + Number(l.amount_in_default_currency), 0),
+    [viewerLines],
+  )
+
+  const viewerOwes = useMemo(
+    () =>
+      Math.abs(
+        viewerLines
           .filter((l) => l.amount < 0)
           .reduce((s, l) => s + Number(l.amount_in_default_currency), 0),
-      )
-    }
-    if (!viewerMember) return 0
-    return balances.lines
-      .filter((l) => l.member_id === viewerMember.id && l.amount > 0)
-      .reduce((s, l) => s + Number(l.amount_in_default_currency), 0)
-  }, [balances, isOwner, viewerMember])
+      ),
+    [viewerLines],
+  )
 
   // Per-line breakdown for the two debt KPIs. Each row shows the other
   // party's name and the amount in its native currency — so a EUR line
@@ -470,42 +490,22 @@ export default function GroupDetailPage() {
   }, [group?.members])
 
   const owedToViewerBreakdown = useMemo<KpiBreakdownItem[]>(() => {
-    if (!balances) return []
-    if (isOwner) {
-      return balances.lines
-        .filter((l) => l.amount > 0)
-        .map((l) => ({
-          name: memberNameById.get(l.member_id) ?? '—',
-          amountText: formatCurrency(Number(l.amount), l.currency, locale),
-        }))
-    }
-    if (!viewerMember || !ownerMember) return []
-    return balances.lines
-      .filter((l) => l.member_id === viewerMember.id && l.amount < 0)
+    return viewerLines
+      .filter((l) => l.amount > 0)
       .map((l) => ({
-        name: ownerMember.name,
-        amountText: formatCurrency(Math.abs(Number(l.amount)), l.currency, locale),
-      }))
-  }, [balances, isOwner, viewerMember, ownerMember, memberNameById, locale])
-
-  const viewerOwesBreakdown = useMemo<KpiBreakdownItem[]>(() => {
-    if (!balances) return []
-    if (isOwner) {
-      return balances.lines
-        .filter((l) => l.amount < 0)
-        .map((l) => ({
-          name: memberNameById.get(l.member_id) ?? '—',
-          amountText: formatCurrency(Math.abs(Number(l.amount)), l.currency, locale),
-        }))
-    }
-    if (!viewerMember || !ownerMember) return []
-    return balances.lines
-      .filter((l) => l.member_id === viewerMember.id && l.amount > 0)
-      .map((l) => ({
-        name: ownerMember.name,
+        name: memberNameById.get(l.member_id) ?? '—',
         amountText: formatCurrency(Number(l.amount), l.currency, locale),
       }))
-  }, [balances, isOwner, viewerMember, ownerMember, memberNameById, locale])
+  }, [viewerLines, memberNameById, locale])
+
+  const viewerOwesBreakdown = useMemo<KpiBreakdownItem[]>(() => {
+    return viewerLines
+      .filter((l) => l.amount < 0)
+      .map((l) => ({
+        name: memberNameById.get(l.member_id) ?? '—',
+        amountText: formatCurrency(Math.abs(Number(l.amount)), l.currency, locale),
+      }))
+  }, [viewerLines, memberNameById, locale])
 
   const monthlyData = useMemo(() => {
     if (!summary) return []
@@ -560,7 +560,7 @@ export default function GroupDetailPage() {
               </span>
             )}
             <Button variant="outline" onClick={() => navigate('/groups')}>
-              <ArrowLeft size={14} className="mr-1" />
+              <ArrowLeft size={14} className="me-1" />
               {t('common.back')}
             </Button>
           </div>
@@ -693,19 +693,13 @@ export default function GroupDetailPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">{member.name}</span>
-                    {/* "(you)" only marks the actual viewer. is_self
-                        identifies the group owner/payer; for non-owner
-                        viewers we show that as "(owner)" instead so
-                        the badge isn't misleading. */}
+                    {/* "(you)" marks the viewer; a linked viewer sees
+                        the owner's member as "(owner)". */}
                     {viewerMember?.id === member.id ? (
                       <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
                         {t('splitGroups.you')}
                       </span>
-                    ) : member.is_self && isOwner ? (
-                      <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                        {t('splitGroups.you')}
-                      </span>
-                    ) : member.is_self ? (
+                    ) : ownerMember?.id === member.id ? (
                       <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
                         {t('splitGroups.ownerBadge')}
                       </span>
@@ -738,25 +732,18 @@ export default function GroupDetailPage() {
         {balances && balances.lines.length > 0 ? (
           <ul className="divide-y divide-border">
             {balances.lines.map((line, idx) => {
+              // Each line is the viewer's balance with one other member:
+              // positive = they owe the viewer, negative = the viewer owes them.
+              // Owner-side lines (see ownerSideLines) are the owner's instead.
               const positive = line.amount > 0
-              // Reframe the line per viewer:
-              //   - Owner sees "X owes you" / "you owe X" (their direct relationship).
-              //   - A linked member sees their own line as "you owe / owes you {owner}",
-              //     and other lines as "{name} owes / is owed by {owner}".
-              const ownerName = ownerMember?.name ?? '—'
               const otherName = memberName_(line.member_id)
-              const isViewerLine = viewerMember?.id === line.member_id
-              const label = isOwner
+              const label = ownerSideLines
                 ? positive
+                  ? t('splitGroups.owesGroupOwner', { name: otherName })
+                  : t('splitGroups.groupOwnerOwes', { name: otherName })
+                : positive
                   ? t('splitGroups.owesYou', { name: otherName })
                   : t('splitGroups.youOwe', { name: otherName })
-                : isViewerLine
-                  ? positive
-                    ? t('splitGroups.youOwe', { name: ownerName })
-                    : t('splitGroups.ownerOwesYou', { name: ownerName })
-                  : positive
-                    ? t('splitGroups.thirdPartyOwes', { name: otherName, owner: ownerName })
-                    : t('splitGroups.thirdPartyOwed', { name: otherName, owner: ownerName })
               return (
                 <li
                   key={`${line.member_id}-${line.currency}-${idx}`}
@@ -774,9 +761,9 @@ export default function GroupDetailPage() {
                     {(() => {
                       // Show "Acertar" if the viewer can act on this line:
                       // - Owner can act on any line
-                      // - Linked member can only act on their own debt line
-                      //   (positive amount = they owe the owner)
-                      const canActLinked = !isOwner && isViewerLine && positive
+                      // - Linked member can only pay what they owe
+                      //   (negative amount = they owe that member)
+                      const canActLinked = !isOwner && !ownerSideLines && !positive
                       if (!isOwner && !canActLinked) return null
                       if (!canWrite) return null
                       return (
@@ -786,10 +773,10 @@ export default function GroupDetailPage() {
                           onClick={() => {
                             if (!balances.self_member_id) return
                             if (positive) {
-                              // Member owes the owner → from = member, to = owner
+                              // Member owes the viewer → from = member, to = viewer
                               openSettleUp(line.member_id, balances.self_member_id, Math.abs(line.amount), line.currency)
                             } else {
-                              // Owner owes the member → from = owner, to = member
+                              // Viewer owes the member → from = viewer, to = member
                               openSettleUp(balances.self_member_id, line.member_id, Math.abs(line.amount), line.currency)
                             }
                           }}
@@ -865,7 +852,7 @@ export default function GroupDetailPage() {
                   </p>
                 </div>
                 <span
-                  className={`text-sm font-semibold tabular-nums ml-3 ${
+                  className={`text-sm font-semibold tabular-nums ms-3 ${
                     tx.type === 'debit' ? 'text-rose-500' : 'text-emerald-600'
                   }`}
                 >
@@ -961,7 +948,7 @@ export default function GroupDetailPage() {
                 onClick={() => deleteMemberMutation.mutate(editingMember.id)}
                 disabled={deleteMemberMutation.isPending}
               >
-                <Trash2 size={14} className="mr-1" />
+                <Trash2 size={14} className="me-1" />
                 {t('common.delete')}
               </Button>
             )}
@@ -987,7 +974,7 @@ export default function GroupDetailPage() {
             <DialogTitle>{t('splitGroups.recordSettlement')}</DialogTitle>
           </DialogHeader>
           {(() => {
-            const myMemberId = viewerMember?.id ?? (isOwner ? ownerMember?.id : null)
+            const myMemberId = viewerMember?.id ?? null
             const viewerIsPayer = !!myMemberId && settleFrom === myMemberId
             return (
           <div className="space-y-4 min-w-0">
@@ -1019,7 +1006,12 @@ export default function GroupDetailPage() {
               <select
                 className="w-full border border-border rounded-md px-3 py-2 text-sm bg-card"
                 value={settleTo}
-                onChange={(e) => setSettleTo(e.target.value)}
+                onChange={(e) => {
+                  setSettleTo(e.target.value)
+                  setSettleTxMode('none')
+                  setSettlePickedTx(null)
+                  setSettleTxSearch('')
+                }}
               >
                 <option value="">{t('splitGroups.selectMember')}</option>
                 {group.members.map((m) => (
@@ -1034,7 +1026,7 @@ export default function GroupDetailPage() {
                 will back this settlement. When linking an existing
                 transaction, the amount/currency/date below mirror that
                 transaction and lock so the two records can't disagree. */}
-            {viewerIsPayer && (
+            {(viewerIsPayer || settleAsReceiver) && (
                 <div className="space-y-2">
                   <Label>{t('splitGroups.txAction')}</Label>
                   <select
@@ -1048,7 +1040,9 @@ export default function GroupDetailPage() {
                     }}
                   >
                     <option value="none">{t('splitGroups.txActionNone')}</option>
-                    <option value="create">{t('splitGroups.txActionCreate')}</option>
+                    {viewerIsPayer && (
+                      <option value="create">{t('splitGroups.txActionCreate')}</option>
+                    )}
                     <option value="existing">{t('splitGroups.txActionExisting')}</option>
                   </select>
                   {settleTxMode === 'create' && (
@@ -1079,13 +1073,14 @@ export default function GroupDetailPage() {
                         placeholder={t('splitGroups.searchTransaction')}
                       />
                       <div className="max-h-44 overflow-y-auto rounded-md border border-border divide-y divide-border">
-                        {(settleTxOptions?.items ?? []).length === 0 ? (
+                        {settleTxChoices.length === 0 ? (
                           <p className="text-xs text-muted-foreground px-3 py-4 text-center">
                             {t('splitGroups.noTransactions')}
                           </p>
                         ) : (
-                          (settleTxOptions?.items ?? []).map((tx) => {
+                          settleTxChoices.map((tx) => {
                             const picked = settlePickedTx?.id === tx.id
+                            const linkable = linkableAmount(tx)
                             return (
                               <button
                                 key={tx.id}
@@ -1094,12 +1089,13 @@ export default function GroupDetailPage() {
                                   // Picking an existing transaction *as* the
                                   // settlement: align amount, currency and
                                   // date so the two records can't disagree.
+                                  // Only what paybacks leave is still free.
                                   setSettlePickedTx(tx)
-                                  setSettleAmount(Number(tx.amount).toFixed(2))
+                                  setSettleAmount(linkable.toFixed(2))
                                   setSettleCurrency(tx.currency)
                                   setSettleDate(tx.date)
                                 }}
-                                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-3 ${
+                                className={`w-full text-start px-3 py-2 text-sm flex items-center justify-between gap-3 ${
                                   picked ? 'bg-primary/10' : 'hover:bg-muted/50'
                                 }`}
                               >
@@ -1108,13 +1104,21 @@ export default function GroupDetailPage() {
                                   {tx.description}
                                 </span>
                                 <span className="shrink-0 tabular-nums text-muted-foreground">
-                                  {tx.amount} {tx.currency}
+                                  {linkable === Number(tx.amount)
+                                    ? tx.amount
+                                    : `${linkable} / ${tx.amount}`}{' '}
+                                  {tx.currency}
                                 </span>
                               </button>
                             )
                           })
                         )}
                       </div>
+                      {settleAsReceiver && (
+                        <p className="text-xs text-muted-foreground">
+                          {t('splitGroups.linkableHint')}
+                        </p>
+                      )}
                       {settlePickedTx && (
                         <p className="text-xs text-muted-foreground truncate">
                           {t('splitGroups.selectedTransaction')}: {settlePickedTx.date} ·{' '}
@@ -1133,7 +1137,8 @@ export default function GroupDetailPage() {
                   step="0.01"
                   value={settleAmount}
                   onChange={(e) => setSettleAmount(e.target.value)}
-                  disabled={settleTxMode === 'existing'}
+                  // One transfer can pay back for several people.
+                  disabled={settleTxMode === 'existing' && !settleAsReceiver}
                 />
               </div>
               <div className="space-y-2">
